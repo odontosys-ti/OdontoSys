@@ -1,0 +1,40 @@
+[env]
+NODE_ENV = "development"
+
+[tools]
+node = "24.0"
+pnpm = "10.0"
+postgres = "17.0"
+
+[tasks.dev]
+description = "Start development servers"
+run = "pnpm dev"
+
+[tasks.build]
+description = "Build all packages"
+run = "pnpm build"
+
+[tasks.test]
+description = "Run all tests"
+run = "pnpm test"
+
+[tasks.lint]
+description = "Run linting and formatting checks"
+run = "pnpm lint"
+
+[tasks.db-migrate]
+description = "Run database migrations"
+run = "pnpm db:migrate"
+
+[tasks.db-seed]
+description = "Seed database with initial data"
+run = "pnpm db:seed"
+
+[tasks.setup]
+description = "Setup development environment"
+run = """
+pnpm install
+docker compose up -d
+pnpm db:migrate
+pnpm db:seed
+"""
