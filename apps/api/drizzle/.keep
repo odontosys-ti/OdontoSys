@@ -1,0 +1,5 @@
+/**
+ * Migrações do banco de dados
+ * Placeholder para T-05
+ */
+export const migrations = {};

@@ -1,0 +1,6 @@
+/**
+ * Contracts compartilhados entre API e Web
+ * Schemas Zod e tipos TypeScript
+ * Placeholder para T-01 e tudo mais
+ */
+export const contracts = {};

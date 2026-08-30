@@ -1,0 +1,43 @@
+{
+  "name": "@odontosys/api",
+  "version": "0.1.0",
+  "description": "API REST do OdontoSys",
+  "private": true,
+  "type": "module",
+  "main": "dist/main.js",
+  "types": "dist/main.d.ts",
+  "scripts": {
+    "dev": "node --watch --loader tsx ./src/main.ts",
+    "build": "tsc",
+    "lint": "eslint src tests --ext .ts --max-warnings=0 && prettier --check src tests",
+    "format": "prettier --write src tests",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "type-check": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "node --loader tsx ./scripts/migrate.ts",
+    "db:seed": "node --loader tsx ./scripts/seed.ts"
+  },
+  "keywords": ["api", "fastify", "odontologia"],
+  "author": "OdontoSys Team",
+  "license": "MIT",
+  "dependencies": {
+    "argon2": "^0.31.2",
+    "drizzle-orm": "^0.45.0",
+    "fastify": "^5.12.0",
+    "pg": "^8.11.0",
+    "pino": "^9.0.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.13.0",
+    "@types/pg": "^8.11.0",
+    "drizzle-kit": "^0.24.0",
+    "tsx": "^4.10.0",
+    "typescript": "^5.5.0",
+    "vitest": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  }
+}
