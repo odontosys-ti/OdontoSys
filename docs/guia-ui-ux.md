@@ -89,3 +89,4 @@ Ao criar uma nova tela ou recurso:
 - [ ] Tratar `isLoading` (`<Spinner />`), `isError` (`<ErrorState />`) e lista vazia (`<EmptyState />`).
 - [ ] Formulários de criação/edição em `Modal` ou página dedicada com botões `Cancelar` (ghost) e `Salvar` (primary).
 - [ ] Testar a interface em 3 larguras: Celular (375px), Tablet (768px) e Desktop (1280px).
+
