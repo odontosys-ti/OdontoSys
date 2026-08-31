@@ -130,21 +130,54 @@ export function PaginaAgendamentos(): ReactElement {
       {dados.length === 0 ? (
         <EmptyState mensagem="Nenhum agendamento no período." />
       ) : (
-        <Table cabecalhos={['Início', 'Fim', 'Status', '']}>
-          {dados.map((item) => (
-            <tr key={item.id} className="border-t border-line">
-              <td className="px-3 py-2">{new Date(item.inicio).toLocaleString('pt-BR')}</td>
-              <td className="px-3 py-2">{new Date(item.fim).toLocaleString('pt-BR')}</td>
-              <td className="px-3 py-2">{item.status}</td>
-              <td className="px-3 py-2">
-                {item.status === 'AGENDADO' ? (
-                  <Button variant="danger" type="button" onClick={() => cancelar.mutate(item.id)}>
-                    Cancelar
-                  </Button>
-                ) : null}
-              </td>
-            </tr>
-          ))}
+        <Table
+          cabecalhos={[
+            'Paciente',
+            'Profissional',
+            'Procedimento',
+            'Início',
+            'Fim',
+            'Status',
+            'Ações',
+          ]}
+        >
+          {dados.map((item) => {
+            const pacienteNome =
+              pacientes.data?.dados.find((p) => p.id === item.pacienteId)?.nome ??
+              item.pacienteId.slice(0, 8);
+            const profissionalNome =
+              profissionais.data?.dados.find((p) => p.id === item.profissionalId)?.nome ??
+              item.profissionalId.slice(0, 8);
+            const procedimentoNome =
+              procedimentos.data?.dados.find((p) => p.id === item.procedimentoId)?.nome ??
+              item.procedimentoId.slice(0, 8);
+
+            return (
+              <tr key={item.id} className="border-t border-line">
+                <td className="px-3 py-2 font-medium">{pacienteNome}</td>
+                <td className="px-3 py-2">{profissionalNome}</td>
+                <td className="px-3 py-2">{procedimentoNome}</td>
+                <td className="px-3 py-2">{new Date(item.inicio).toLocaleString('pt-BR')}</td>
+                <td className="px-3 py-2">{new Date(item.fim).toLocaleString('pt-BR')}</td>
+                <td className="px-3 py-2">
+                  <span
+                    className={
+                      item.status === 'AGENDADO' ? 'font-medium text-emerald-700' : 'text-ink-400'
+                    }
+                  >
+                    {item.status}
+                  </span>
+                </td>
+                <td className="px-3 py-2">
+                  {item.status === 'AGENDADO' ? (
+                    <Button variant="danger" type="button" onClick={() => cancelar.mutate(item.id)}>
+                      Cancelar
+                    </Button>
+                  ) : null}
+                </td>
+              </tr>
+            );
+          })}
         </Table>
       )}
     </section>
