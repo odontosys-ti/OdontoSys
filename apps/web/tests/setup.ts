@@ -1,5 +1,1 @@
-/**
- * Tests para Web
- * Placeholder para T-17
- */
-export const tests = {};
+import '@testing-library/jest-dom/vitest';

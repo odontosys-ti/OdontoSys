@@ -1,6 +1,6 @@
 import react from '@vitejs/plugin-react';
+import path from 'node:path';
 import { defineConfig } from 'vitest/config';
-import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
@@ -11,8 +11,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@web': path.resolve(__dirname, './src'),
-      '@contracts': path.resolve(__dirname, '../../packages/contracts/src'),
+      '@web': path.resolve(import.meta.dirname, './src'),
     },
   },
 });
