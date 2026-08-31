@@ -2,12 +2,13 @@ import type { PacienteResponse } from '@odontosys/contracts';
 
 import { AppError } from '../../../platform/erros';
 import { paraIso } from '../../../platform/http/datas';
-import type { Paciente } from '../domain/paciente';
+import type {
+  IPacienteRepository,
+  Paciente,
+  PacienteAtualizacao,
+  PacienteNovo,
+} from '../domain/paciente';
 import { PacienteRepository } from '../infra/paciente.repository';
-import {
-  atualizarPacienteComAuditoria,
-  criarPacienteComAuditoria,
-} from '../infra/paciente.repository';
 
 export function serializarPaciente(paciente: Paciente): PacienteResponse {
   return {
@@ -23,7 +24,7 @@ export function serializarPaciente(paciente: Paciente): PacienteResponse {
 }
 
 export class ServicoPacientes {
-  constructor(private readonly repo = new PacienteRepository()) {}
+  constructor(private readonly repo: IPacienteRepository = new PacienteRepository()) {}
 
   async listar(clinicaId: string, pagina: number, tamanho: number, busca?: string) {
     return this.repo.listar(clinicaId, pagina, tamanho, busca);
@@ -40,18 +41,18 @@ export class ServicoPacientes {
   async criar(
     clinicaId: string,
     usuarioId: string,
-    dados: { nome: string; documento: string; nascimento: Date; observacoes: string }
+    dados: Omit<PacienteNovo, 'clinicaId'>
   ): Promise<Paciente> {
-    return criarPacienteComAuditoria({ ...dados, clinicaId }, usuarioId);
+    return this.repo.criar({ ...dados, clinicaId }, usuarioId);
   }
 
   async atualizar(
     clinicaId: string,
     usuarioId: string,
     id: string,
-    dados: { nome?: string; documento?: string; nascimento?: Date; observacoes?: string }
+    dados: PacienteAtualizacao
   ): Promise<Paciente> {
-    const atualizado = await atualizarPacienteComAuditoria(clinicaId, id, dados, usuarioId);
+    const atualizado = await this.repo.atualizar(clinicaId, id, dados, usuarioId);
     if (!atualizado) {
       throw new AppError('NAO_ENCONTRADO');
     }

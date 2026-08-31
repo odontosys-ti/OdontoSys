@@ -16,6 +16,53 @@ export type Agendamento = {
   atualizadoEm: Date;
 };
 
+export type AgendamentoNovo = {
+  clinicaId: string;
+  pacienteId: string;
+  profissionalId: string;
+  procedimentoId: string;
+  inicio: Date;
+  fim: Date;
+  criadoPor: string;
+};
+
+export type ListaPaginada<T> = {
+  itens: T[];
+  total: number;
+};
+
+export interface IAgendamentoRepository {
+  listar(
+    clinicaId: string,
+    pagina: number,
+    tamanho: number,
+    de: Date,
+    ate: Date,
+    profissionalId?: string
+  ): Promise<ListaPaginada<Agendamento>>;
+  obterPorId(clinicaId: string, id: string): Promise<Agendamento | null>;
+  buscarConflito(
+    profissionalId: string,
+    inicio: Date,
+    fim: Date,
+    ignorarId?: string
+  ): Promise<boolean>;
+  verificarRecursosAtivos(
+    clinicaId: string,
+    ids: { pacienteId: string; profissionalId: string; procedimentoId: string }
+  ): Promise<{ duracaoMinutos: number }>;
+  obterProcedimentoPorId(clinicaId: string, id: string): Promise<{ duracaoMinutos: number } | null>;
+  criar(dados: AgendamentoNovo): Promise<Agendamento>;
+  reagendar(
+    clinicaId: string,
+    usuarioId: string,
+    id: string,
+    novoInicio: Date,
+    novoFim: Date
+  ): Promise<Agendamento | null>;
+  cancelar(clinicaId: string, usuarioId: string, id: string): Promise<Agendamento | null>;
+}
+
 export function calcularFim(inicio: Date, duracaoMinutos: number): Date {
   return new Date(inicio.getTime() + duracaoMinutos * 60_000);
 }

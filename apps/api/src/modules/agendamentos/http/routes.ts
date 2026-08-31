@@ -7,19 +7,15 @@ import type { FastifyInstance } from 'fastify';
 
 import { contexto, exigirPapel } from '../../../platform/auth/jwt';
 import { parseData } from '../../../platform/http/datas';
-import {
-  cancelarAgendamento,
-  criarAgendamento,
-  listarAgendamentos,
-  reagendarAgendamento,
-  serializarAgendamento,
-} from '../application/servico';
+import { ServicoAgendamentos, serializarAgendamento } from '../application/servico';
 
 export async function registrarRotasAgendamentos(app: FastifyInstance): Promise<void> {
+  const servico = new ServicoAgendamentos();
+
   app.get('/agendamentos', { onRequest: [app.authenticate] }, async (request) => {
     const query = SchemaListarAgendamentosQuery.parse(request.query);
     const sessao = contexto(request);
-    const lista = await listarAgendamentos(
+    const lista = await servico.listar(
       sessao.clinicaId,
       query.pagina,
       query.tamanho,
@@ -39,7 +35,7 @@ export async function registrarRotasAgendamentos(app: FastifyInstance): Promise<
     async (request, reply) => {
       const body = SchemaCriarAgendamento.parse(request.body);
       const sessao = contexto(request);
-      const criado = await criarAgendamento(sessao.clinicaId, sessao.usuarioId, {
+      const criado = await servico.criar(sessao.clinicaId, sessao.usuarioId, {
         pacienteId: body.pacienteId,
         profissionalId: body.profissionalId,
         procedimentoId: body.procedimentoId,
@@ -56,7 +52,7 @@ export async function registrarRotasAgendamentos(app: FastifyInstance): Promise<
       const params = request.params as { id: string };
       const body = SchemaAtualizarAgendamento.parse(request.body);
       const sessao = contexto(request);
-      const atualizado = await reagendarAgendamento(
+      const atualizado = await servico.reagendar(
         sessao.clinicaId,
         sessao.usuarioId,
         params.id,
@@ -73,7 +69,7 @@ export async function registrarRotasAgendamentos(app: FastifyInstance): Promise<
       const params = request.params as { id: string };
       const sessao = contexto(request);
       return serializarAgendamento(
-        await cancelarAgendamento(sessao.clinicaId, sessao.usuarioId, params.id)
+        await servico.cancelar(sessao.clinicaId, sessao.usuarioId, params.id)
       );
     }
   );

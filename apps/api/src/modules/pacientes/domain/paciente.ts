@@ -33,6 +33,11 @@ export interface IPacienteRepository {
     busca?: string
   ): Promise<ListaPaginada<Paciente>>;
   obterPorId(clinicaId: string, id: string): Promise<Paciente | null>;
-  criar(dados: PacienteNovo): Promise<Paciente>;
-  atualizar(clinicaId: string, id: string, dados: PacienteAtualizacao): Promise<Paciente | null>;
+  criar(dados: PacienteNovo, usuarioIdAuditoria: string): Promise<Paciente>;
+  atualizar(
+    clinicaId: string,
+    id: string,
+    dados: PacienteAtualizacao,
+    usuarioIdAuditoria: string
+  ): Promise<Paciente | null>;
 }
