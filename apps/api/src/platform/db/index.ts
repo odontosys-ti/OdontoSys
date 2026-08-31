@@ -1,13 +1,36 @@
-import { drizzle } from 'drizzle-orm/node-postgres';
+import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { sql } from 'drizzle-orm';
 import { Pool } from 'pg';
+
+import { env } from '../config';
 import * as schema from './schema';
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || '',
-});
+export type Database = NodePgDatabase<typeof schema>;
 
-export const db = drizzle(pool, { schema });
+let pool: Pool | undefined;
+let dbInstance: Database | undefined;
 
-export async function closeDb(): Promise<void> {
-  await pool.end();
+export function db(): Database {
+  if (!dbInstance) {
+    pool = new Pool({ connectionString: env().DATABASE_URL });
+    dbInstance = drizzle(pool, { schema });
+  }
+  return dbInstance;
+}
+
+export async function pingBanco(): Promise<boolean> {
+  try {
+    await db().execute(sql`select 1`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function fecharDb(): Promise<void> {
+  if (pool) {
+    await pool.end();
+    pool = undefined;
+    dbInstance = undefined;
+  }
 }

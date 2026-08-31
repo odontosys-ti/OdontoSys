@@ -3,9 +3,10 @@ CREATE TYPE "papel" AS ENUM ('RECEPCAO', 'DENTISTA', 'ADMIN');
 CREATE TYPE "status_agendamento" AS ENUM ('AGENDADO', 'CANCELADO');
 CREATE TYPE "acao_auditoria" AS ENUM ('CRIAR', 'EDITAR', 'DELETAR');
 
--- Create clinica table
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+
 CREATE TABLE "clinica" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"id" uuid PRIMARY KEY NOT NULL,
 	"nome" text NOT NULL,
 	"fuso_horario" text DEFAULT 'America/Sao_Paulo' NOT NULL,
 	"ativo" boolean DEFAULT true NOT NULL,
@@ -13,9 +14,8 @@ CREATE TABLE "clinica" (
 	"atualizado_em" timestamp with time zone DEFAULT now() NOT NULL
 );
 
--- Create usuario table
 CREATE TABLE "usuario" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"id" uuid PRIMARY KEY NOT NULL,
 	"clinica_id" uuid NOT NULL,
 	"nome" text NOT NULL,
 	"email" text NOT NULL,
@@ -27,9 +27,8 @@ CREATE TABLE "usuario" (
 	CONSTRAINT "usuario_clinica_id_clinica_id_fk" FOREIGN KEY ("clinica_id") REFERENCES "clinica"("id") ON DELETE RESTRICT
 );
 
--- Create profissional table
 CREATE TABLE "profissional" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"id" uuid PRIMARY KEY NOT NULL,
 	"clinica_id" uuid NOT NULL,
 	"usuario_id" uuid NOT NULL,
 	"nome" text NOT NULL,
@@ -42,23 +41,21 @@ CREATE TABLE "profissional" (
 	CONSTRAINT "profissional_usuario_id_usuario_id_fk" FOREIGN KEY ("usuario_id") REFERENCES "usuario"("id") ON DELETE RESTRICT
 );
 
--- Create paciente table
 CREATE TABLE "paciente" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"id" uuid PRIMARY KEY NOT NULL,
 	"clinica_id" uuid NOT NULL,
 	"nome" text NOT NULL,
 	"documento" text NOT NULL,
 	"nascimento" timestamp with time zone NOT NULL,
-	"observacoes" text DEFAULT '',
+	"observacoes" text DEFAULT '' NOT NULL,
 	"ativo" boolean DEFAULT true NOT NULL,
 	"criado_em" timestamp with time zone DEFAULT now() NOT NULL,
 	"atualizado_em" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "paciente_clinica_id_clinica_id_fk" FOREIGN KEY ("clinica_id") REFERENCES "clinica"("id") ON DELETE RESTRICT
 );
 
--- Create procedimento table
 CREATE TABLE "procedimento" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"id" uuid PRIMARY KEY NOT NULL,
 	"clinica_id" uuid NOT NULL,
 	"nome" text NOT NULL,
 	"duracao_minutos" integer NOT NULL,
@@ -68,9 +65,8 @@ CREATE TABLE "procedimento" (
 	CONSTRAINT "procedimento_clinica_id_clinica_id_fk" FOREIGN KEY ("clinica_id") REFERENCES "clinica"("id") ON DELETE RESTRICT
 );
 
--- Create agendamento table
 CREATE TABLE "agendamento" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"id" uuid PRIMARY KEY NOT NULL,
 	"clinica_id" uuid NOT NULL,
 	"paciente_id" uuid NOT NULL,
 	"profissional_id" uuid NOT NULL,
@@ -89,9 +85,8 @@ CREATE TABLE "agendamento" (
 	CONSTRAINT "fim_greater_than_inicio" CHECK ("fim" > "inicio")
 );
 
--- Create registro_auditoria table
 CREATE TABLE "registro_auditoria" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"id" uuid PRIMARY KEY NOT NULL,
 	"clinica_id" uuid NOT NULL,
 	"usuario_id" uuid NOT NULL,
 	"entidade" text NOT NULL,
@@ -104,9 +99,8 @@ CREATE TABLE "registro_auditoria" (
 	CONSTRAINT "auditoria_usuario_id_usuario_id_fk" FOREIGN KEY ("usuario_id") REFERENCES "usuario"("id") ON DELETE RESTRICT
 );
 
--- Create configuracao_clinica table
 CREATE TABLE "configuracao_clinica" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"id" uuid PRIMARY KEY NOT NULL,
 	"clinica_id" uuid NOT NULL,
 	"chave" text NOT NULL,
 	"valor" jsonb NOT NULL,
@@ -115,7 +109,6 @@ CREATE TABLE "configuracao_clinica" (
 	CONSTRAINT "configuracao_clinica_clinica_id_clinica_id_fk" FOREIGN KEY ("clinica_id") REFERENCES "clinica"("id") ON DELETE RESTRICT
 );
 
--- Create indexes (T-06)
 CREATE UNIQUE INDEX "email_clinica_unique" ON "usuario" ("clinica_id", "email");
 CREATE INDEX "profissional_clinica_idx" ON "profissional" ("clinica_id");
 CREATE INDEX "paciente_clinica_idx" ON "paciente" ("clinica_id");
@@ -125,3 +118,9 @@ CREATE INDEX "agendamento_clinica_idx" ON "agendamento" ("clinica_id");
 CREATE INDEX "auditoria_clinica_idx" ON "registro_auditoria" ("clinica_id");
 CREATE INDEX "auditoria_entidade_idx" ON "registro_auditoria" ("entidade", "entidade_id");
 CREATE UNIQUE INDEX "clinica_chave_unique" ON "configuracao_clinica" ("clinica_id", "chave");
+
+ALTER TABLE "agendamento" ADD CONSTRAINT "agendamento_sem_sobreposicao"
+  EXCLUDE USING gist (
+    profissional_id WITH =,
+    tstzrange(inicio, fim, '[)') WITH &&
+  ) WHERE (status = 'AGENDADO');

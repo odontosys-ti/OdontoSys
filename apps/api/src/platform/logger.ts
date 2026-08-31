@@ -1,22 +1,43 @@
 import pino from 'pino';
 
-const isDev = process.env.NODE_ENV === 'development';
+import { env } from './config';
 
-export const logger = pino({
-  level: process.env.LOG_LEVEL || 'info',
-  transport: isDev
-    ? {
-        target: 'pino-pretty',
-        options: {
-          colorize: true,
-          translateTime: 'SYS:standard',
-          ignore: 'pid,hostname',
-        },
-      }
-    : undefined,
-  // Redação de dados pessoais
-  redact: {
-    paths: ['*.nome', '*.email', '*.documento', '*.senha', '*.senhaHash'],
-    remove: true,
-  },
-});
+export function criarOpcoesLogger() {
+  const configuracao = env();
+  const desenvolvimento = configuracao.NODE_ENV === 'development';
+
+  return {
+    level: configuracao.LOG_LEVEL,
+    redact: {
+      paths: [
+        'nome',
+        'email',
+        'documento',
+        'senha',
+        'senhaHash',
+        '*.nome',
+        '*.email',
+        '*.documento',
+        '*.senha',
+        '*.senhaHash',
+        'req.body.senha',
+        'req.body.email',
+      ],
+      remove: true,
+    },
+    transport: desenvolvimento
+      ? {
+          target: 'pino-pretty',
+          options: {
+            colorize: true,
+            translateTime: 'SYS:standard',
+            ignore: 'pid,hostname',
+          },
+        }
+      : undefined,
+  };
+}
+
+export function criarLogger(): pino.Logger {
+  return pino(criarOpcoesLogger());
+}

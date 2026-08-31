@@ -1,6 +1,19 @@
-/**
- * Contracts compartilhados entre API e Web
- * Schemas Zod e tipos TypeScript
- * Placeholder para T-01 e tudo mais
- */
-export const contracts = {};
+{
+  "name": "@odontosys/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc",
+    "type-check": "tsc --noEmit",
+    "lint": "echo 'contracts lint via root'"
+  },
+  "dependencies": {
+    "zod": "^4.1.0"
+  }
+}

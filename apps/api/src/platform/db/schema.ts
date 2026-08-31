@@ -1,55 +1,41 @@
-import { InferSelectModel, InferInsertModel, sql } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import {
+  boolean,
+  check,
+  index,
+  integer,
+  jsonb,
+  pgEnum,
   pgTable,
   text,
   timestamp,
-  uuid,
-  boolean,
-  integer,
-  enum as pgEnum,
-  jsonb,
   uniqueIndex,
-  index,
-  check,
+  uuid,
 } from 'drizzle-orm/pg-core';
-
-// ========================================
-// Enums
-// ========================================
 
 export const papelEnum = pgEnum('papel', ['RECEPCAO', 'DENTISTA', 'ADMIN']);
 export const statusAgendamentoEnum = pgEnum('status_agendamento', ['AGENDADO', 'CANCELADO']);
 export const acaoAuditoriaEnum = pgEnum('acao_auditoria', ['CRIAR', 'EDITAR', 'DELETAR']);
 
-// ========================================
-// Tabelas
-// ========================================
-
-/**
- * Clínica — contexto para multi-clínica futura
- * Uma linha na seed inicial
- */
-export const clinica = pgTable('clinica', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  nome: text('nome').notNull(),
-  fusoHorario: text('fuso_horario').notNull().default('America/Sao_Paulo'),
-  ativo: boolean('ativo').notNull().default(true),
-  criadoEm: timestamp('criado_em', { withTimezone: true, mode: 'date' })
-    .notNull()
-    .defaultNow(),
+const timestamps = {
+  criadoEm: timestamp('criado_em', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
   atualizadoEm: timestamp('atualizado_em', { withTimezone: true, mode: 'date' })
     .notNull()
     .defaultNow(),
+};
+
+export const clinica = pgTable('clinica', {
+  id: uuid('id').primaryKey(),
+  nome: text('nome').notNull(),
+  fusoHorario: text('fuso_horario').notNull().default('America/Sao_Paulo'),
+  ativo: boolean('ativo').notNull().default(true),
+  ...timestamps,
 });
 
-/**
- * Usuário — autenticação e acesso
- * Papel: RECEPCAO | DENTISTA | ADMIN
- */
 export const usuario = pgTable(
   'usuario',
   {
-    id: uuid('id').primaryKey().defaultRandom(),
+    id: uuid('id').primaryKey(),
     clinicaId: uuid('clinica_id')
       .notNull()
       .references(() => clinica.id, { onDelete: 'restrict' }),
@@ -58,25 +44,15 @@ export const usuario = pgTable(
     senhaHash: text('senha_hash').notNull(),
     papel: papelEnum('papel').notNull(),
     ativo: boolean('ativo').notNull().default(true),
-    criadoEm: timestamp('criado_em', { withTimezone: true, mode: 'date' })
-      .notNull()
-      .defaultNow(),
-    atualizadoEm: timestamp('atualizado_em', { withTimezone: true, mode: 'date' })
-      .notNull()
-      .defaultNow(),
+    ...timestamps,
   },
-  (table) => ({
-    emailClinicaUnique: uniqueIndex('email_clinica_unique').on(table.clinicaId, table.email),
-  }),
+  (table) => [uniqueIndex('email_clinica_unique').on(table.clinicaId, table.email)]
 );
 
-/**
- * Profissional — dentista que atende
- */
 export const profissional = pgTable(
   'profissional',
   {
-    id: uuid('id').primaryKey().defaultRandom(),
+    id: uuid('id').primaryKey(),
     clinicaId: uuid('clinica_id')
       .notNull()
       .references(() => clinica.id, { onDelete: 'restrict' }),
@@ -87,79 +63,47 @@ export const profissional = pgTable(
     cro: text('cro').notNull(),
     especialidade: text('especialidade').notNull(),
     ativo: boolean('ativo').notNull().default(true),
-    criadoEm: timestamp('criado_em', { withTimezone: true, mode: 'date' })
-      .notNull()
-      .defaultNow(),
-    atualizadoEm: timestamp('atualizado_em', { withTimezone: true, mode: 'date' })
-      .notNull()
-      .defaultNow(),
+    ...timestamps,
   },
-  (table) => ({
-    clinicaIdx: index('profissional_clinica_idx').on(table.clinicaId),
-  }),
+  (table) => [index('profissional_clinica_idx').on(table.clinicaId)]
 );
 
-/**
- * Paciente — usuário da clínica (sem contato — vem em US-03)
- */
 export const paciente = pgTable(
   'paciente',
   {
-    id: uuid('id').primaryKey().defaultRandom(),
+    id: uuid('id').primaryKey(),
     clinicaId: uuid('clinica_id')
       .notNull()
       .references(() => clinica.id, { onDelete: 'restrict' }),
     nome: text('nome').notNull(),
     documento: text('documento').notNull(),
     nascimento: timestamp('nascimento', { withTimezone: true, mode: 'date' }).notNull(),
-    observacoes: text('observacoes').default(''),
+    observacoes: text('observacoes').notNull().default(''),
     ativo: boolean('ativo').notNull().default(true),
-    criadoEm: timestamp('criado_em', { withTimezone: true, mode: 'date' })
-      .notNull()
-      .defaultNow(),
-    atualizadoEm: timestamp('atualizado_em', { withTimezone: true, mode: 'date' })
-      .notNull()
-      .defaultNow(),
+    ...timestamps,
   },
-  (table) => ({
-    clinicaIdx: index('paciente_clinica_idx').on(table.clinicaId),
-  }),
+  (table) => [index('paciente_clinica_idx').on(table.clinicaId)]
 );
 
-/**
- * Procedimento — tipo de atendimento com duração
- */
 export const procedimento = pgTable(
   'procedimento',
   {
-    id: uuid('id').primaryKey().defaultRandom(),
+    id: uuid('id').primaryKey(),
     clinicaId: uuid('clinica_id')
       .notNull()
       .references(() => clinica.id, { onDelete: 'restrict' }),
     nome: text('nome').notNull(),
     duracaoMinutos: integer('duracao_minutos').notNull(),
     ativo: boolean('ativo').notNull().default(true),
-    criadoEm: timestamp('criado_em', { withTimezone: true, mode: 'date' })
-      .notNull()
-      .defaultNow(),
-    atualizadoEm: timestamp('atualizado_em', { withTimezone: true, mode: 'date' })
-      .notNull()
-      .defaultNow(),
+    ...timestamps,
   },
-  (table) => ({
-    clinicaIdx: index('procedimento_clinica_idx').on(table.clinicaId),
-  }),
+  (table) => [index('procedimento_clinica_idx').on(table.clinicaId)]
 );
 
-/**
- * Agendamento — consulta marcada
- * Status: AGENDADO | CANCELADO
- * Fim é calculado a partir de duração do procedimento
- */
 export const agendamento = pgTable(
   'agendamento',
   {
-    id: uuid('id').primaryKey().defaultRandom(),
+    id: uuid('id').primaryKey(),
     clinicaId: uuid('clinica_id')
       .notNull()
       .references(() => clinica.id, { onDelete: 'restrict' }),
@@ -178,34 +122,19 @@ export const agendamento = pgTable(
     criadoPor: uuid('criado_por')
       .notNull()
       .references(() => usuario.id, { onDelete: 'restrict' }),
-    criadoEm: timestamp('criado_em', { withTimezone: true, mode: 'date' })
-      .notNull()
-      .defaultNow(),
-    atualizadoEm: timestamp('atualizado_em', { withTimezone: true, mode: 'date' })
-      .notNull()
-      .defaultNow(),
+    ...timestamps,
   },
-  (table) => ({
-    profissionalInicioIdx: index('agendamento_profissional_inicio_idx').on(
-      table.profissionalId,
-      table.inicio,
-    ),
-    clinicaIdx: index('agendamento_clinica_idx').on(table.clinicaId),
-    fimGreaterThanInicio: check(
-      'fim_greater_than_inicio',
-      sql`fim > inicio`,
-    ),
-  }),
+  (table) => [
+    index('agendamento_profissional_inicio_idx').on(table.profissionalId, table.inicio),
+    index('agendamento_clinica_idx').on(table.clinicaId),
+    check('fim_greater_than_inicio', sql`${table.fim} > ${table.inicio}`),
+  ]
 );
 
-/**
- * Registro de Auditoria — rastreabilidade de todas as ações
- * Ação: CRIAR | EDITAR | DELETAR
- */
 export const registroAuditoria = pgTable(
   'registro_auditoria',
   {
-    id: uuid('id').primaryKey().defaultRandom(),
+    id: uuid('id').primaryKey(),
     clinicaId: uuid('clinica_id')
       .notNull()
       .references(() => clinica.id, { onDelete: 'restrict' }),
@@ -217,65 +146,24 @@ export const registroAuditoria = pgTable(
     acao: acaoAuditoriaEnum('acao').notNull(),
     dadosAntes: jsonb('dados_antes'),
     dadosDepois: jsonb('dados_depois'),
-    criadoEm: timestamp('criado_em', { withTimezone: true, mode: 'date' })
-      .notNull()
-      .defaultNow(),
+    criadoEm: timestamp('criado_em', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
   },
-  (table) => ({
-    clinicaIdx: index('auditoria_clinica_idx').on(table.clinicaId),
-    entidadeIdx: index('auditoria_entidade_idx').on(table.entidade, table.entidadeId),
-  }),
+  (table) => [
+    index('auditoria_clinica_idx').on(table.clinicaId),
+    index('auditoria_entidade_idx').on(table.entidade, table.entidadeId),
+  ]
 );
 
-/**
- * Configuração da Clínica — mecanismo genérico de parametrização
- * Valor armazenado como JSONB
- */
 export const configuracaoClinica = pgTable(
   'configuracao_clinica',
   {
-    id: uuid('id').primaryKey().defaultRandom(),
+    id: uuid('id').primaryKey(),
     clinicaId: uuid('clinica_id')
       .notNull()
       .references(() => clinica.id, { onDelete: 'restrict' }),
     chave: text('chave').notNull(),
     valor: jsonb('valor').notNull(),
-    criadoEm: timestamp('criado_em', { withTimezone: true, mode: 'date' })
-      .notNull()
-      .defaultNow(),
-    atualizadoEm: timestamp('atualizado_em', { withTimezone: true, mode: 'date' })
-      .notNull()
-      .defaultNow(),
+    ...timestamps,
   },
-  (table) => ({
-    clinicaChaveUnique: uniqueIndex('clinica_chave_unique').on(table.clinicaId, table.chave),
-  }),
+  (table) => [uniqueIndex('clinica_chave_unique').on(table.clinicaId, table.chave)]
 );
-
-// ========================================
-// Type Exports
-// ========================================
-
-export type Clinica = InferSelectModel<typeof clinica>;
-export type ClinicaInsert = InferInsertModel<typeof clinica>;
-
-export type Usuario = InferSelectModel<typeof usuario>;
-export type UsuarioInsert = InferInsertModel<typeof usuario>;
-
-export type Profissional = InferSelectModel<typeof profissional>;
-export type ProfissionalInsert = InferInsertModel<typeof profissional>;
-
-export type Paciente = InferSelectModel<typeof paciente>;
-export type PacienteInsert = InferInsertModel<typeof paciente>;
-
-export type Procedimento = InferSelectModel<typeof procedimento>;
-export type ProcedimentoInsert = InferInsertModel<typeof procedimento>;
-
-export type Agendamento = InferSelectModel<typeof agendamento>;
-export type AgendamentoInsert = InferInsertModel<typeof agendamento>;
-
-export type RegistroAuditoria = InferSelectModel<typeof registroAuditoria>;
-export type RegistroAuditoriaInsert = InferInsertModel<typeof registroAuditoria>;
-
-export type ConfiguracaoClinica = InferSelectModel<typeof configuracaoClinica>;
-export type ConfiguracaoClinicaInsert = InferInsertModel<typeof configuracaoClinica>;

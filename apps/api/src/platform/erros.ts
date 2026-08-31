@@ -1,88 +1,30 @@
-/**
- * Catálogo de erros da aplicação
- * Mapeia códigos de erro para status HTTP e mensagens
- */
-
-export const ErrorCatalog = {
-  VALIDACAO_INVALIDA: {
-    status: 400,
-    message: 'Dados inválidos',
-  },
-  NAO_AUTENTICADO: {
-    status: 401,
-    message: 'Não autenticado',
-  },
-  SEM_PERMISSAO: {
-    status: 403,
-    message: 'Sem permissão para executar esta ação',
-  },
-  NAO_ENCONTRADO: {
-    status: 404,
-    message: 'Recurso não encontrado',
-  },
+export const CatalogoErros = {
+  VALIDACAO_INVALIDA: { status: 400, mensagem: 'Dados inválidos' },
+  NAO_AUTENTICADO: { status: 401, mensagem: 'Não autenticado' },
+  SEM_PERMISSAO: { status: 403, mensagem: 'Sem permissão para executar esta ação' },
+  NAO_ENCONTRADO: { status: 404, mensagem: 'Recurso não encontrado' },
   CONFLITO_HORARIO: {
     status: 409,
-    message: 'O profissional já possui atendimento nesse horário',
+    mensagem: 'O profissional já possui atendimento nesse horário.',
   },
-  REGRA_NEGOCIO: {
-    status: 422,
-    message: 'Violação de regra de negócio',
-  },
-  ERRO_INTERNO: {
-    status: 500,
-    message: 'Erro interno do servidor',
-  },
+  REGRA_NEGOCIO: { status: 422, mensagem: 'Violação de regra de negócio' },
+  ERRO_INTERNO: { status: 500, mensagem: 'Erro interno do servidor' },
 } as const;
 
-export type ErrorCode = keyof typeof ErrorCatalog;
+export type CodigoErro = keyof typeof CatalogoErros;
 
-/**
- * AppError — erro padrão da aplicação
- */
+export type DetalheErro = { campo?: string; mensagem: string };
+
 export class AppError extends Error {
-  public readonly codigo: ErrorCode;
+  public readonly codigo: CodigoErro;
   public readonly status: number;
-  public readonly detalhes: unknown;
+  public readonly detalhes: DetalheErro[];
 
-  constructor(codigo: ErrorCode, detalhes?: unknown) {
-    const config = ErrorCatalog[codigo];
-    super(config.message);
+  constructor(codigo: CodigoErro, detalhes: DetalheErro[] = []) {
+    const config = CatalogoErros[codigo];
+    super(config.mensagem);
     this.codigo = codigo;
     this.status = config.status;
     this.detalhes = detalhes;
-    Object.setPrototypeOf(this, AppError.prototype);
-  }
-}
-
-/**
- * Erros de domínio específicos
- */
-export class ErroAgendamentoConflito extends AppError {
-  constructor() {
-    super('CONFLITO_HORARIO');
-  }
-}
-
-export class ErroUsuarioNaoEncontrado extends AppError {
-  constructor() {
-    super('NAO_ENCONTRADO', { entidade: 'usuario' });
-  }
-}
-
-export class ErroPacienteNaoEncontrado extends AppError {
-  constructor() {
-    super('NAO_ENCONTRADO', { entidade: 'paciente' });
-  }
-}
-
-export class ErroProfissionalNaoEncontrado extends AppError {
-  constructor() {
-    super('NAO_ENCONTRADO', { entidade: 'profissional' });
-  }
-}
-
-export class ErroProcedimentoNaoEncontrado extends AppError {
-  constructor() {
-    super('NAO_ENCONTRADO', { entidade: 'procedimento' });
   }
 }
