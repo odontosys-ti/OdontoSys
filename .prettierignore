@@ -5,6 +5,9 @@ coverage
 build
 .env
 .env.local
-pnpm-lock.yaml
 package-lock.json
 yarn.lock
+pnpm-lock.yaml
+docs
+CLAUDE.md
+apps/api/drizzle
