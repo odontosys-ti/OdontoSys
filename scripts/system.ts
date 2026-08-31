@@ -44,23 +44,28 @@ function executarComando(comando: string, args: string[]): Promise<number> {
   });
 }
 
-function testarPorta(porta: number, host = '127.0.0.1', timeoutMs = 1000): Promise<boolean> {
-  return new Promise((resolve) => {
-    const socket = createConnection({ port: porta, host });
-    socket.setTimeout(timeoutMs);
-    socket.on('connect', () => {
-      socket.destroy();
-      resolve(true);
+async function testarPorta(porta: number, timeoutMs = 800): Promise<boolean> {
+  const hosts = ['localhost', '127.0.0.1', '::1'];
+  for (const host of hosts) {
+    const ok = await new Promise<boolean>((resolve) => {
+      const socket = createConnection({ port: porta, host });
+      socket.setTimeout(timeoutMs);
+      socket.on('connect', () => {
+        socket.destroy();
+        resolve(true);
+      });
+      socket.on('error', () => {
+        socket.destroy();
+        resolve(false);
+      });
+      socket.on('timeout', () => {
+        socket.destroy();
+        resolve(false);
+      });
     });
-    socket.on('error', () => {
-      socket.destroy();
-      resolve(false);
-    });
-    socket.on('timeout', () => {
-      socket.destroy();
-      resolve(false);
-    });
-  });
+    if (ok) return true;
+  }
+  return false;
 }
 
 async function aguardarBanco(porta: number, maxTentativas = 30): Promise<boolean> {
