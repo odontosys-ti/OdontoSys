@@ -1,11 +1,26 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-import { Button, EmptyState, ErrorState, Modal, Spinner, Table, Toast } from '../src/shared/ui';
-import { PaginaLogin } from '../src/features/login/PaginaLogin';
 import { GuardaAutenticado, GuardaPapel } from '../src/app/guards';
+import { PaginaLogin } from '../src/features/login/PaginaLogin';
+import {
+  Badge,
+  Button,
+  Card,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  EmptyState,
+  ErrorState,
+  Modal,
+  PageHeader,
+  Spinner,
+  StatusBadge,
+  Table,
+  Toast,
+} from '../src/shared/ui';
 
 describe('componentes da web', () => {
   it('ErrorState anuncia falha com role alert', () => {
@@ -34,6 +49,37 @@ describe('componentes da web', () => {
     expect(screen.getByRole('button', { name: 'Principal' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Secundário' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Excluir' })).toBeInTheDocument();
+  });
+
+  it('Badge e StatusBadge renderizam variantes semânticas', () => {
+    render(
+      <div>
+        <Badge variant="info">Ortodontia</Badge>
+        <StatusBadge status="AGENDADO" />
+        <StatusBadge status="CANCELADO" />
+        <StatusBadge status="ADMIN" />
+      </div>
+    );
+    expect(screen.getByText('Ortodontia')).toBeInTheDocument();
+    expect(screen.getByText('Agendado')).toBeInTheDocument();
+    expect(screen.getByText('Cancelado')).toBeInTheDocument();
+    expect(screen.getByText('Administrador')).toBeInTheDocument();
+  });
+
+  it('Card e PageHeader renderizam estruturas hierárquicas', () => {
+    render(
+      <Card>
+        <CardHeader>
+          <CardTitle>Título do Card</CardTitle>
+          <CardDescription>Descrição do Card</CardDescription>
+        </CardHeader>
+        <PageHeader titulo="Página Teste" subtitulo="Subtítulo teste" />
+      </Card>
+    );
+    expect(screen.getByText('Título do Card')).toBeInTheDocument();
+    expect(screen.getByText('Descrição do Card')).toBeInTheDocument();
+    expect(screen.getByText('Página Teste')).toBeInTheDocument();
+    expect(screen.getByText('Subtítulo teste')).toBeInTheDocument();
   });
 
   it('Table renderiza cabeçalhos e linhas', () => {
@@ -81,7 +127,7 @@ describe('componentes da web', () => {
         </MemoryRouter>
       </QueryClientProvider>
     );
-    expect(screen.getByRole('heading', { name: 'Entrar' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Entrar na plataforma' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Entrar' })).toBeInTheDocument();
   });
 
