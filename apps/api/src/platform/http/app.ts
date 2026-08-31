@@ -1,56 +1,68 @@
-import Fastify from 'fastify';
-import { registrarRotasAuth } from '../../modules/auth/http/routes';
-import { registrarHandlerGlobalErro, adicionarRequestIdEmRespostas } from './error-handler';
-import { registrarPluginJwt } from '../auth/jwt';
-import { logger } from '../logger';
+import Fastify, { type FastifyInstance } from 'fastify';
 
-export async function criarApp(): Promise<ReturnType<typeof Fastify>> {
+import { registrarRotasAgendamentos } from '../../modules/agendamentos/http/routes';
+import { registrarRotasAuth } from '../../modules/auth/http/routes';
+import { registrarRotasPacientes } from '../../modules/pacientes/http/routes';
+import { registrarRotasProcedimentos } from '../../modules/procedimentos/http/routes';
+import { registrarRotasProfissionais } from '../../modules/profissionais/http/routes';
+import { registrarPlugins } from '../auth/jwt';
+import { env } from '../config';
+import { pingBanco } from '../db';
+import { criarOpcoesLogger } from '../logger';
+import { criarUuidV7 } from '../uuid';
+import { registrarHandlerErro } from './error-handler';
+
+export async function criarApp(): Promise<FastifyInstance> {
   const app = Fastify({
-    logger,
+    logger: criarOpcoesLogger(),
     trustProxy: true,
+    genReqId: () => criarUuidV7(),
+    requestIdHeader: 'x-request-id',
   });
 
-  // Registrar plugins
-  await registrarPluginJwt(app);
+  await registrarPlugins(app);
+  registrarHandlerErro(app);
 
-  // Hooks e middleware
-  adicionarRequestIdEmRespostas(app);
+  app.get('/health', async (_request, reply) => {
+    const bancoOk = await pingBanco();
+    const status = bancoOk ? 'ok' : 'degradado';
+    return reply.status(bancoOk ? 200 : 503).send({
+      status,
+      banco: bancoOk ? 'ok' : 'indisponivel',
+      timestamp: new Date().toISOString(),
+    });
+  });
 
-  // Handler de erro global
-  registrarHandlerGlobalErro(app);
-
-  // Health check
-  app.get('/health', async () => ({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-  }));
-
-  // Registrar rotas
-  await registrarRotasAuth(app);
+  await app.register(
+    async (api) => {
+      await registrarRotasAuth(api);
+      await registrarRotasPacientes(api);
+      await registrarRotasProfissionais(api);
+      await registrarRotasProcedimentos(api);
+      await registrarRotasAgendamentos(api);
+    },
+    { prefix: '/api/v1' }
+  );
 
   return app;
 }
 
-export async function iniciarApp(porta: number = 3333): Promise<void> {
+export async function iniciarApp(): Promise<void> {
+  const configuracao = env();
   const app = await criarApp();
 
-  process.on('SIGTERM', async () => {
-    logger.info('SIGTERM recebido, encerrando graciosamente...');
+  const encerrar = async (): Promise<void> => {
+    app.log.info('encerrando graciosamente');
     await app.close();
     process.exit(0);
+  };
+
+  process.on('SIGTERM', () => {
+    void encerrar();
+  });
+  process.on('SIGINT', () => {
+    void encerrar();
   });
 
-  process.on('SIGINT', async () => {
-    logger.info('SIGINT recebido, encerrando graciosamente...');
-    await app.close();
-    process.exit(0);
-  });
-
-  try {
-    await app.listen({ port: porta, host: '0.0.0.0' });
-    logger.info(`🚀 API rodando em http://localhost:${porta}`);
-  } catch (erro) {
-    logger.error(erro, 'Erro ao iniciar aplicação');
-    process.exit(1);
-  }
+  await app.listen({ port: configuracao.API_PORT, host: '0.0.0.0' });
 }
