@@ -4,41 +4,51 @@ Sprint 0: fundação (autenticação, cadastros, agendamento simples, auditoria,
 
 ---
 
-## 🚀 Comandos Mestres
+## ⚡ Comandos Mestres (Tudo em Um)
 
-| Comando              | Descrição                                                                                                                                                                                  |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **`pnpm dev`**       | **Inicia o ambiente de desenvolvimento completo** (API na porta `3333` e Web na porta `5173` em paralelo com hot-reload).                                                                  |
-| **`pnpm check`**     | **Comando mestre de qualidade e validação**: executa Linter (ESLint 9 + Prettier), Type-Check (TypeScript strict nos 3 pacotes), Suíte completa de Testes (API + Web) e Build de produção. |
-| **`pnpm check:fix`** | Auto-formata todo o código com Prettier e executa o `pnpm check`.                                                                                                                          |
-| **`pnpm setup:all`** | Executa as migrações no banco de dados (`db:migrate`) e semeia os dados iniciais de demonstração (`db:seed`).                                                                              |
+Você pode subir ou parar **todo o ecossistema** com **um único comando inteligente**:
+
+| Comando                                | Ação                      | O que ele faz automaticamente                                                                                                                                                                                                                                                                                 |
+| -------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`pnpm up`** ou **`pnpm start:all`**  | 🚀 **Rodar Tudo**         | 1. Cria `.env` se não existir.<br>2. Sobe containers Docker (`postgres-dev` e `postgres-test`).<br>3. Aguarda portas 5432/5433 responderem.<br>4. Executa migrações e seed idempotente.<br>5. Inicia API Fastify e Web React em paralelo.<br>6. Trata Ctrl+C com encerramento gracioso de todos os processos. |
+| **`pnpm down`** ou **`pnpm stop:all`** | 🛑 **Parar Tudo**         | Para e desliga containers Docker e libera todos os processos.                                                                                                                                                                                                                                                 |
+| **`pnpm status`**                      | 📊 **Verificar Saúde**    | Exibe o status em tempo real de cada serviço (Postgres Dev/Test, API e Web).                                                                                                                                                                                                                                  |
+| **`pnpm check`**                       | 🧪 **Validar Qualidade**  | Executa Linter, Prettier, TypeScript Strict, 29 Testes automatizados e Build.                                                                                                                                                                                                                                 |
+| **`pnpm check:fix`**                   | ✨ **Formatar e Validar** | Auto-formata com Prettier e executa o `pnpm check`.                                                                                                                                                                                                                                                           |
 
 ---
 
-## 🛠️ Como subir o projeto
+## 🎯 Como usar no dia a dia
+
+### 1. Para Rodar Tudo com 1 Comando:
 
 ```bash
-# 1. Configurar variáveis de ambiente
-cp .env.example .env
-
-# 2. Instalar dependências
-pnpm install
-
-# 3. Subir os bancos de dados (PostgreSQL dev e test)
-docker compose up -d
-
-# 4. Migrar e semear o banco
-pnpm setup:all
-
-# 5. Iniciar API e Web simultaneamente
-pnpm dev
+pnpm up
 ```
 
-### URLs de Acesso:
+_(Ou `pnpm start:all`)_
 
-- **Web App**: [http://localhost:5173](http://localhost:5173)
-- **API Fastify**: [http://localhost:3333](http://localhost:3333)
-- **Documentação OpenAPI / Swagger**: [http://localhost:3333/docs](http://localhost:3333/docs)
+### 2. Para Parar Tudo com 1 Comando:
+
+```bash
+pnpm down
+```
+
+_(Ou `pnpm stop:all`)_
+
+### 3. Para Checar o Status dos Serviços:
+
+```bash
+pnpm status
+```
+
+---
+
+## 🌐 URLs de Acesso Local
+
+- **Aplicação Web (Apple HIG)**: [http://localhost:5173](http://localhost:5173)
+- **API Fastify Backend**: [http://localhost:3333](http://localhost:3333)
+- **Documentação Swagger / OpenAPI**: [http://localhost:3333/docs](http://localhost:3333/docs)
 
 ### Credenciais de Demonstração (Seed):
 
@@ -48,7 +58,7 @@ pnpm dev
 
 ---
 
-## 🔍 Scripts de Qualidade Individuais
+## 🔍 Scripts Utilitários Individuais
 
 ```bash
 pnpm lint          # Verifica padrões de código e formatação
@@ -56,6 +66,8 @@ pnpm format        # Corrige formatação com Prettier
 pnpm type-check    # Validação de tipos TypeScript em todos os workspaces
 pnpm test          # Executa testes unitários e de integração (Vitest)
 pnpm build         # Compila pacotes contracts, api e web para produção
+pnpm db:migrate    # Executa migrações do Drizzle
+pnpm db:seed       # Popula dados iniciais de teste
 ```
 
 ---
