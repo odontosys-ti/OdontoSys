@@ -10,8 +10,8 @@ Você pode subir ou parar **todo o ecossistema** com **um único comando intelig
 
 | Comando                                | Ação                      | O que ele faz automaticamente                                                                                                                                                                                                                                                                                 |
 | -------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`pnpm up`** ou **`pnpm start:all`**  | 🚀 **Rodar Tudo**         | 1. Cria `.env` se não existir.<br>2. Sobe containers Docker (`postgres-dev` e `postgres-test`).<br>3. Aguarda portas 5432/5433 responderem.<br>4. Executa migrações e seed idempotente.<br>5. Inicia API Fastify e Web React em paralelo.<br>6. Trata Ctrl+C com encerramento gracioso de todos os processos. |
-| **`pnpm down`** ou **`pnpm stop:all`** | 🛑 **Parar Tudo**         | Para e desliga containers Docker e libera todos os processos.                                                                                                                                                                                                                                                 |
+| **`pnpm dev`** ou **`pnpm start`**     | 🚀 **Rodar Tudo**         | 1. Cria `.env` se não existir.<br>2. Sobe containers Docker (`postgres-dev` e `postgres-test`).<br>3. Aguarda portas 5432/5433 responderem.<br>4. Executa migrações e seed idempotente.<br>5. Inicia API Fastify e Web React em paralelo.<br>6. Trata Ctrl+C com encerramento gracioso de todos os processos. |
+| **`pnpm stop`** ou **`pnpm stop:all`** | 🛑 **Parar Tudo**         | Para containers Docker e desliga os serviços.                                                                                                                                                                                                                                                                 |
 | **`pnpm status`**                      | 📊 **Verificar Saúde**    | Exibe o status em tempo real de cada serviço (Postgres Dev/Test, API e Web).                                                                                                                                                                                                                                  |
 | **`pnpm check`**                       | 🧪 **Validar Qualidade**  | Executa Linter, Prettier, TypeScript Strict, 29 Testes automatizados e Build.                                                                                                                                                                                                                                 |
 | **`pnpm check:fix`**                   | ✨ **Formatar e Validar** | Auto-formata com Prettier e executa o `pnpm check`.                                                                                                                                                                                                                                                           |
@@ -23,18 +23,18 @@ Você pode subir ou parar **todo o ecossistema** com **um único comando intelig
 ### 1. Para Rodar Tudo com 1 Comando:
 
 ```bash
-pnpm up
+pnpm dev
 ```
 
-_(Ou `pnpm start:all`)_
+_(ou `pnpm start`)_
 
 ### 2. Para Parar Tudo com 1 Comando:
 
 ```bash
-pnpm down
+pnpm stop
 ```
 
-_(Ou `pnpm stop:all`)_
+_(ou `pnpm stop:all`)_
 
 ### 3. Para Checar o Status dos Serviços:
 
