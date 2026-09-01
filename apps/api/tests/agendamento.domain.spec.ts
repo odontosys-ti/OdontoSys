@@ -2,6 +2,7 @@ import { AppError } from '../src/platform/erros';
 import {
   calcularFim,
   intervalosSobrepostos,
+  validarDuracao,
   validarInicioFuturo,
 } from '../src/modules/agendamentos/domain/agendamento';
 
@@ -43,5 +44,10 @@ describe('domínio de agendamento', () => {
         new Date('2026-01-01T00:00:00.000Z')
       )
     ).toThrow(AppError);
+  });
+
+  it('rejeita duração não positiva ou fracionária', () => {
+    expect(() => validarDuracao(0)).toThrow(AppError);
+    expect(() => validarDuracao(1.5)).toThrow(AppError);
   });
 });

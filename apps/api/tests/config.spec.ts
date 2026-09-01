@@ -13,6 +13,7 @@ describe('configuração', () => {
   it('converte a duração da sessão para segundos', () => {
     expect(duracaoEmSegundos('8h')).toBe(28_800);
     expect(duracaoEmSegundos('30m')).toBe(1_800);
+    expect(() => duracaoEmSegundos('amanhã')).toThrow('Duração inválida');
   });
 
   it('rejeita duração de sessão e origem inválidas', () => {

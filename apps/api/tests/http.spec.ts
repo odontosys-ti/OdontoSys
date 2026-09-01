@@ -137,6 +137,9 @@ describe('API HTTP', () => {
       url: `/api/v1/pacientes/${novoPacienteId}`,
       cookies: { sessionId: token },
       payload: {
+        nome: 'Maria Silva',
+        documento: '98765432111',
+        nascimento: '1995-05-21T00:00:00.000Z',
         observacoes: 'Paciente alérgica a dipirona',
       },
     });
@@ -192,11 +195,19 @@ describe('API HTTP', () => {
     // Listar profissionais
     const lista = await app.inject({
       method: 'GET',
-      url: '/api/v1/profissionais',
+      url: '/api/v1/profissionais?busca=Autorizado',
       cookies: { sessionId: tokenRecepcao },
     });
     expect(lista.statusCode).toBe(200);
     expect(lista.json().dados.length).toBeGreaterThan(0);
+
+    const consulta = await app.inject({
+      method: 'GET',
+      url: `/api/v1/profissionais/${idProfissional}`,
+      cookies: { sessionId: tokenRecepcao },
+    });
+    expect(consulta.statusCode).toBe(200);
+    expect(consulta.json().nome).toBe('Dr. Autorizado');
 
     // ADMIN edita
     const edicao = await app.inject({
@@ -204,11 +215,21 @@ describe('API HTTP', () => {
       url: `/api/v1/profissionais/${idProfissional}`,
       cookies: { sessionId: tokenAdmin },
       payload: {
+        nome: 'Dr. Atualizado',
+        cro: '77777',
         especialidade: 'Implantodontia',
+        ativo: true,
       },
     });
     expect(edicao.statusCode).toBe(200);
     expect(edicao.json().especialidade).toBe('Implantodontia');
+
+    const ausente = await app.inject({
+      method: 'GET',
+      url: '/api/v1/profissionais/01900000-0000-7000-8000-000000000099',
+      cookies: { sessionId: tokenRecepcao },
+    });
+    expect(ausente.statusCode).toBe(404);
   });
 
   it('RECEPCAO não cria procedimento (403) e ADMIN cria e edita procedimento', async () => {
@@ -244,10 +265,18 @@ describe('API HTTP', () => {
     // Listar procedimentos
     const lista = await app.inject({
       method: 'GET',
-      url: '/api/v1/procedimentos',
+      url: '/api/v1/procedimentos?busca=Canal',
       cookies: { sessionId: tokenRecepcao },
     });
     expect(lista.statusCode).toBe(200);
+
+    const consulta = await app.inject({
+      method: 'GET',
+      url: `/api/v1/procedimentos/${idProcedimento}`,
+      cookies: { sessionId: tokenRecepcao },
+    });
+    expect(consulta.statusCode).toBe(200);
+    expect(consulta.json().nome).toBe('Canal');
 
     // ADMIN edita
     const edicao = await app.inject({
@@ -255,7 +284,9 @@ describe('API HTTP', () => {
       url: `/api/v1/procedimentos/${idProcedimento}`,
       cookies: { sessionId: tokenAdmin },
       payload: {
+        nome: 'Canal completo',
         duracaoMinutos: 90,
+        ativo: true,
       },
     });
     expect(edicao.statusCode).toBe(200);
@@ -266,8 +297,15 @@ describe('API HTTP', () => {
       .from(registroAuditoria)
       .where(eq(registroAuditoria.entidadeId, idProcedimento));
     const auditoriaEdicao = auditorias.find((item) => item.acao === 'EDITAR');
-    expect(auditoriaEdicao?.dadosAntes).toEqual({ duracaoMinutos: 60 });
-    expect(auditoriaEdicao?.dadosDepois).toEqual({ duracaoMinutos: 90 });
+    expect(auditoriaEdicao?.dadosAntes).toEqual({ nome: 'Canal', duracaoMinutos: 60 });
+    expect(auditoriaEdicao?.dadosDepois).toEqual({ nome: 'Canal completo', duracaoMinutos: 90 });
+
+    const ausente = await app.inject({
+      method: 'GET',
+      url: '/api/v1/procedimentos/01900000-0000-7000-8000-000000000099',
+      cookies: { sessionId: tokenRecepcao },
+    });
+    expect(ausente.statusCode).toBe(404);
   });
 
   it('recurso de outra clínica devolve 404', async () => {
