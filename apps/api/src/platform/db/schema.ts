@@ -147,6 +147,9 @@ export const registroAuditoria = pgTable(
     dadosAntes: jsonb('dados_antes'),
     dadosDepois: jsonb('dados_depois'),
     criadoEm: timestamp('criado_em', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+    atualizadoEm: timestamp('atualizado_em', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
   },
   (table) => [
     index('auditoria_clinica_idx').on(table.clinicaId),

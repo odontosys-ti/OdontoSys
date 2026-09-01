@@ -100,6 +100,14 @@ export class ProfissionalRepository implements IProfissionalRepository {
     usuarioIdAuditoria: string
   ): Promise<Profissional | null> {
     return db().transaction(async (tx) => {
+      const [existente] = await tx
+        .select()
+        .from(profissional)
+        .where(and(eq(profissional.id, id), eq(profissional.clinicaId, clinicaId)))
+        .limit(1);
+      if (!existente) {
+        return null;
+      }
       const [linha] = await tx
         .update(profissional)
         .set({ ...dados, atualizadoEm: new Date() })
@@ -108,13 +116,17 @@ export class ProfissionalRepository implements IProfissionalRepository {
       if (!linha) {
         return null;
       }
+      const camposAlterados = Object.entries(dados)
+        .filter(([, valor]) => valor !== undefined)
+        .map(([campo]) => campo);
       await registrarAuditoria(tx, {
         clinicaId,
         usuarioId: usuarioIdAuditoria,
         entidade: 'profissional',
         entidadeId: id,
         acao: 'EDITAR',
-        dadosDepois: { id },
+        dadosAntes: { camposAlterados },
+        dadosDepois: { camposAlterados },
       });
       return mapear(linha);
     });

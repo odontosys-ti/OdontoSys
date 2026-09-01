@@ -247,6 +247,14 @@ describe('API HTTP', () => {
     });
     expect(edicao.statusCode).toBe(200);
     expect(edicao.json().duracaoMinutos).toBe(90);
+
+    const auditorias = await db()
+      .select()
+      .from(registroAuditoria)
+      .where(eq(registroAuditoria.entidadeId, idProcedimento));
+    const auditoriaEdicao = auditorias.find((item) => item.acao === 'EDITAR');
+    expect(auditoriaEdicao?.dadosAntes).toEqual({ duracaoMinutos: 60 });
+    expect(auditoriaEdicao?.dadosDepois).toEqual({ duracaoMinutos: 90 });
   });
 
   it('recurso de outra clínica devolve 404', async () => {

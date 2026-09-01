@@ -96,6 +96,14 @@ export class ProcedimentoRepository implements IProcedimentoRepository {
     usuarioIdAuditoria: string
   ): Promise<Procedimento | null> {
     return db().transaction(async (tx) => {
+      const [existente] = await tx
+        .select()
+        .from(procedimento)
+        .where(and(eq(procedimento.id, id), eq(procedimento.clinicaId, clinicaId)))
+        .limit(1);
+      if (!existente) {
+        return null;
+      }
       const [linha] = await tx
         .update(procedimento)
         .set({ ...dados, atualizadoEm: new Date() })
@@ -104,13 +112,24 @@ export class ProcedimentoRepository implements IProcedimentoRepository {
       if (!linha) {
         return null;
       }
+      const dadosAntes: Record<string, string | number> = {};
+      const dadosDepois: Record<string, string | number> = {};
+      if (dados.nome !== undefined) {
+        dadosAntes.nome = existente.nome;
+        dadosDepois.nome = linha.nome;
+      }
+      if (dados.duracaoMinutos !== undefined) {
+        dadosAntes.duracaoMinutos = existente.duracaoMinutos;
+        dadosDepois.duracaoMinutos = linha.duracaoMinutos;
+      }
       await registrarAuditoria(tx, {
         clinicaId,
         usuarioId: usuarioIdAuditoria,
         entidade: 'procedimento',
         entidadeId: id,
         acao: 'EDITAR',
-        dadosDepois: { id },
+        dadosAntes,
+        dadosDepois,
       });
       return mapear(linha);
     });

@@ -1,6 +1,7 @@
 import { and, count, eq, gte, lte, ne } from 'drizzle-orm';
 
 import { registrarAuditoria } from '../../../platform/auditoria/service';
+import type { Tx } from '../../../platform/auditoria/service';
 import { db } from '../../../platform/db';
 import { agendamento, paciente, procedimento, profissional } from '../../../platform/db/schema';
 import { AppError } from '../../../platform/erros';
@@ -41,6 +42,29 @@ function ehExclusao(erro: unknown): boolean {
 }
 
 export class AgendamentoRepository implements IAgendamentoRepository {
+  private async buscarConflitoCom(
+    executor: Tx,
+    profissionalId: string,
+    inicio: Date,
+    fim: Date,
+    ignorarId?: string
+  ): Promise<boolean> {
+    const filtros = [
+      eq(agendamento.profissionalId, profissionalId),
+      eq(agendamento.status, 'AGENDADO'),
+    ];
+    if (ignorarId) {
+      filtros.push(ne(agendamento.id, ignorarId));
+    }
+    const existentes = await executor
+      .select()
+      .from(agendamento)
+      .where(and(...filtros));
+    return existentes.some((item) =>
+      intervalosSobrepostos({ inicio, fim }, { inicio: item.inicio, fim: item.fim })
+    );
+  }
+
   async listar(
     clinicaId: string,
     pagina: number,
@@ -87,20 +111,7 @@ export class AgendamentoRepository implements IAgendamentoRepository {
     fim: Date,
     ignorarId?: string
   ): Promise<boolean> {
-    const filtros = [
-      eq(agendamento.profissionalId, profissionalId),
-      eq(agendamento.status, 'AGENDADO'),
-    ];
-    if (ignorarId) {
-      filtros.push(ne(agendamento.id, ignorarId));
-    }
-    const existentes = await db()
-      .select()
-      .from(agendamento)
-      .where(and(...filtros));
-    return existentes.some((item) =>
-      intervalosSobrepostos({ inicio, fim }, { inicio: item.inicio, fim: item.fim })
-    );
+    return this.buscarConflitoCom(db(), profissionalId, inicio, fim, ignorarId);
   }
 
   async verificarRecursosAtivos(
@@ -150,7 +161,7 @@ export class AgendamentoRepository implements IAgendamentoRepository {
   async criar(dados: AgendamentoNovo): Promise<Agendamento> {
     try {
       return await db().transaction(async (tx) => {
-        if (await this.buscarConflito(dados.profissionalId, dados.inicio, dados.fim)) {
+        if (await this.buscarConflitoCom(tx, dados.profissionalId, dados.inicio, dados.fim)) {
           throw new AppError('CONFLITO_HORARIO');
         }
         const agoraDb = new Date();
@@ -215,7 +226,7 @@ export class AgendamentoRepository implements IAgendamentoRepository {
           ]);
         }
 
-        if (await this.buscarConflito(existente.profissionalId, novoInicio, novoFim, id)) {
+        if (await this.buscarConflitoCom(tx, existente.profissionalId, novoInicio, novoFim, id)) {
           throw new AppError('CONFLITO_HORARIO');
         }
 

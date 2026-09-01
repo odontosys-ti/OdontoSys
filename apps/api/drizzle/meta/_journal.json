@@ -8,6 +8,13 @@
       "when": 1730000000000,
       "tag": "0001_initial_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788282828528,
+      "tag": "0001_adiciona_atualizacao_auditoria",
+      "breakpoints": true
     }
   ]
 }

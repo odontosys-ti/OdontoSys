@@ -121,14 +121,17 @@ export class PacienteRepository implements IPacienteRepository {
       if (!linha) {
         return null;
       }
+      const camposAlterados = Object.entries(dados)
+        .filter(([, valor]) => valor !== undefined)
+        .map(([campo]) => campo);
       await registrarAuditoria(tx, {
         clinicaId,
         usuarioId: usuarioIdAuditoria,
         entidade: 'paciente',
         entidadeId: id,
         acao: 'EDITAR',
-        dadosAntes: { id },
-        dadosDepois: { id },
+        dadosAntes: { camposAlterados },
+        dadosDepois: { camposAlterados },
       });
       return mapear(linha);
     });
