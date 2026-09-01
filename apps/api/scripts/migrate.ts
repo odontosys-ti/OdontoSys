@@ -18,7 +18,13 @@ export async function executarMigracoes(connectionString: string): Promise<void>
     )
   `);
 
-  const arquivos = (await readdir(pastaMigracoes)).filter((nome) => nome.endsWith('.sql')).sort();
+  const arquivos = (await readdir(pastaMigracoes))
+    .filter((nome) => nome.endsWith('.sql'))
+    .sort((a, b) => {
+      if (a === '0001_initial_schema.sql') return -1;
+      if (b === '0001_initial_schema.sql') return 1;
+      return a.localeCompare(b);
+    });
 
   for (const arquivo of arquivos) {
     const ja = await pool.query('SELECT 1 FROM schema_migrations WHERE id = $1', [arquivo]);
