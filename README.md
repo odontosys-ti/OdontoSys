@@ -10,15 +10,15 @@ Sprint 0: fundação (autenticação, cadastros, agendamento simples, auditoria,
 
 Você pode iniciar o ambiente local ou a versão compilada para túnel com um comando:
 
-| Comando                  | Ação                      | O que ele faz automaticamente                                                                                                               |
-| ------------------------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`bun run dev`**        | 🚀 **Desenvolvimento**    | Cria `.env` se necessário, sobe os bancos dev/test, aplica migrações, garante o seed demo e inicia API/Web em modo watch.                   |
-| **`bun run production`** | 🌐 **Produção local**     | Sobe apenas o banco dev, aplica migrações, gera o build e serve API/Web compilados em `:3333`/`:4173`, com proxy `/api` para uso via túnel. |
-| **`bun run prod`**       | ↪️ **Atalho**             | Alcunha de `bun run production`.                                                                                                            |
-| **`pnpm down`**          | 🛑 **Parar bancos**       | Para e remove os containers Docker. Processos API/Web são encerrados com `Ctrl+C` no terminal em que foram iniciados.                       |
-| **`pnpm status`**        | 📊 **Verificar Saúde**    | Exibe o status em tempo real de cada serviço (Postgres Dev/Test, API e Web).                                                                |
-| **`pnpm check`**         | 🧪 **Validar Qualidade**  | Executa Linter, Prettier, TypeScript Strict, testes automatizados e Build.                                                                  |
-| **`pnpm check:fix`**     | ✨ **Formatar e Validar** | Auto-formata com Prettier e executa o `pnpm check`.                                                                                         |
+| Comando                  | Ação                      | O que ele faz automaticamente                                                                                                                 |
+| ------------------------ | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`bun run dev`**        | 🚀 **Desenvolvimento**    | Cria `.env` se necessário, sobe os bancos dev/test, aplica migrações, garante o seed demo e inicia API/Web em modo watch.                     |
+| **`bun run production`** | 🌐 **Produção local**     | Sobe apenas o banco dev, aplica migrações, gera o build, serve API/Web compilados em `:3333`/`:4173` e inicia o túnel Cloudflare configurado. |
+| **`bun run prod`**       | ↪️ **Atalho**             | Alcunha de `bun run production`.                                                                                                              |
+| **`pnpm down`**          | 🛑 **Parar bancos**       | Para e remove os containers Docker. Processos API/Web são encerrados com `Ctrl+C` no terminal em que foram iniciados.                         |
+| **`pnpm status`**        | 📊 **Verificar Saúde**    | Exibe o status em tempo real de cada serviço (Postgres Dev/Test, API e Web).                                                                  |
+| **`pnpm check`**         | 🧪 **Validar Qualidade**  | Executa Linter, Prettier, TypeScript Strict, testes automatizados e Build.                                                                    |
+| **`pnpm check:fix`**     | ✨ **Formatar e Validar** | Auto-formata com Prettier e executa o `pnpm check`.                                                                                           |
 
 ---
 
@@ -38,7 +38,7 @@ Para preparar a versão compilada para um túnel local:
 bun run production
 ```
 
-O comando de produção local não executa seed e assume que o `.env` já existe com os dados demo previamente preparados. Configure `ODONTOSYS_PUBLIC_ORIGIN` no `.env` quando o endereço público do túnel for diferente do domínio padrão.
+O comando de produção local não executa seed e assume que o `.env` já existe com os dados demo previamente preparados. Ele obtém a credencial do túnel com `cloudflared tunnel token` e inicia automaticamente o túnel `odontosys` para `odontosys.devstank.com.br`. Configure `ODONTOSYS_PUBLIC_ORIGIN` e `ODONTOSYS_TUNNEL_ID` no `.env` quando necessário.
 
 ### 2. Para Parar Tudo com 1 Comando:
 

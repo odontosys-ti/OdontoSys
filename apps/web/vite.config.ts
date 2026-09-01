@@ -3,6 +3,9 @@ import react from '@vitejs/plugin-react';
 import path from 'node:path';
 import { defineConfig } from 'vite';
 
+const origemPublica = process.env.ODONTOSYS_PUBLIC_ORIGIN ?? 'https://odontosys.devstank.com.br';
+const hostPublico = new URL(origemPublica).hostname;
+
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
@@ -14,6 +17,7 @@ export default defineConfig({
     host: '127.0.0.1',
     port: 4173,
     strictPort: true,
+    allowedHosts: [hostPublico],
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:3333',

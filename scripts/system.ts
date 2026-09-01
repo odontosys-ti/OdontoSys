@@ -6,6 +6,7 @@ import { join } from 'node:path';
 const ROOT_DIR = process.cwd();
 const ENV_PATH = join(ROOT_DIR, '.env');
 const ENV_EXAMPLE_PATH = join(ROOT_DIR, '.env.example');
+const TUNNEL_ID_PADRAO = '4f38cd9a-9c06-4fd0-8b5c-cbf3e33264f7';
 
 const cor = {
   reset: '\x1b[0m',
@@ -72,6 +73,10 @@ async function aguardarPorta(porta: number, tentativas = 30): Promise<boolean> {
     await new Promise((res) => setTimeout(res, 500));
   }
   return false;
+}
+
+async function aguardar(milisegundos: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, milisegundos));
 }
 
 async function iniciarServico(
@@ -185,7 +190,7 @@ async function iniciarServicos(
     porta: number;
   }>,
   ambiente?: NodeJS.ProcessEnv
-): Promise<void> {
+): Promise<ChildProcess[]> {
   const processos: ChildProcess[] = [];
   configurarEncerramento(processos);
   try {
@@ -201,10 +206,124 @@ async function iniciarServicos(
         )
       )
     );
+    return processos;
   } catch (cause) {
     for (const processo of processos) {
       if (!processo.killed) processo.kill('SIGTERM');
     }
+    throw cause;
+  }
+}
+
+async function obterTokenTunel(tunnelId: string): Promise<string> {
+  const tokenConfigurado = process.env.TUNNEL_TOKEN?.trim();
+  if (tokenConfigurado) return tokenConfigurado;
+
+  return new Promise((resolve, reject) => {
+    const processo = spawn('cloudflared', ['tunnel', 'token', tunnelId], {
+      cwd: ROOT_DIR,
+      env: process.env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      shell: false,
+    });
+    let saida = '';
+    let erroSaida = '';
+    processo.stdout?.on('data', (chunk: Buffer) => {
+      saida += chunk.toString();
+    });
+    processo.stderr?.on('data', (chunk: Buffer) => {
+      erroSaida += chunk.toString();
+    });
+    processo.once('error', () => reject(new Error('cloudflared não está instalado ou acessível.')));
+    processo.once('close', (codigo) => {
+      const token = saida.trim();
+      if (codigo === 0 && token) {
+        resolve(token);
+        return;
+      }
+      const detalhe = erroSaida.trim().split('\n').at(-1);
+      reject(
+        new Error(
+          `Não foi possível obter a credencial do túnel ${tunnelId}.${detalhe ? ` ${detalhe}` : ''}`
+        )
+      );
+    });
+  });
+}
+
+async function origemDisponivel(origem: string): Promise<boolean> {
+  try {
+    const resposta = await fetch(origem, { redirect: 'manual' });
+    return resposta.status >= 200 && resposta.status < 400;
+  } catch {
+    return false;
+  }
+}
+
+async function aguardarOrigem(origem: string, tentativas = 30): Promise<boolean> {
+  for (let tentativa = 0; tentativa < tentativas; tentativa++) {
+    if (await origemDisponivel(origem)) return true;
+    await aguardar(1000);
+  }
+  return false;
+}
+
+async function iniciarTunel(origem: string, processos: ChildProcess[]): Promise<void> {
+  const tunnelId = process.env.ODONTOSYS_TUNNEL_ID ?? TUNNEL_ID_PADRAO;
+  const token = await obterTokenTunel(tunnelId);
+  log(`Iniciando túnel ${tunnelId}...`);
+  const processo = spawn(
+    'cloudflared',
+    ['tunnel', 'run', '--url', 'http://127.0.0.1:4173', tunnelId],
+    {
+      cwd: ROOT_DIR,
+      env: { ...process.env, TUNNEL_TOKEN: token },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      shell: false,
+    }
+  );
+  processos.push(processo);
+
+  const conexao = new Promise<void>((resolve, reject) => {
+    let finalizada = false;
+    const timer = setTimeout(() => {
+      if (finalizada) return;
+      finalizada = true;
+      reject(new Error('O túnel não estabeleceu conexão com a Cloudflare no tempo esperado.'));
+    }, 30_000);
+    const finalizar = (erro?: Error): void => {
+      if (finalizada) return;
+      finalizada = true;
+      clearTimeout(timer);
+      if (erro) {
+        reject(erro);
+      } else {
+        resolve();
+      }
+    };
+    const observar = (chunk: Buffer, stream: NodeJS.WriteStream): void => {
+      const texto = chunk.toString();
+      stream.write(texto);
+      if (texto.includes('Registered tunnel connection')) finalizar();
+    };
+    processo.stdout?.on('data', (chunk: Buffer) => observar(chunk, process.stdout));
+    processo.stderr?.on('data', (chunk: Buffer) => observar(chunk, process.stderr));
+    processo.once('error', () => finalizar(new Error('Falha ao iniciar o cloudflared.')));
+    processo.once('exit', (codigo) => {
+      if (!finalizada) {
+        finalizar(new Error(`cloudflared encerrou antes de conectar (código ${codigo ?? 1}).`));
+      }
+    });
+  });
+
+  try {
+    await conexao;
+    if (!(await aguardarOrigem(origem))) {
+      throw new Error(`O túnel conectou, mas ${origem} ainda não responde.`);
+    }
+    sucesso(`OdontoSys público em ${origem}`);
+  } catch (cause) {
+    if (!processo.killed) processo.kill('SIGTERM');
     throw cause;
   }
 }
@@ -253,7 +372,7 @@ async function comandoProduction(): Promise<void> {
   sucesso('Build pronto.');
 
   log('Iniciando produção local para o túnel...');
-  await iniciarServicos(
+  const processos = await iniciarServicos(
     [
       {
         nome: 'API produção',
@@ -270,6 +389,14 @@ async function comandoProduction(): Promise<void> {
     ],
     ambiente
   );
+  try {
+    await iniciarTunel(ambiente.WEB_ORIGIN ?? 'https://odontosys.devstank.com.br', processos);
+  } catch (cause) {
+    for (const processo of processos) {
+      if (!processo.killed) processo.kill('SIGTERM');
+    }
+    throw cause;
+  }
 }
 
 async function comandoStop(): Promise<void> {
