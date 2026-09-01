@@ -157,6 +157,7 @@ describe('componentes da web', () => {
     );
     expect(screen.getByRole('heading', { name: 'Entrar na plataforma' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Entrar' })).toBeInTheDocument();
+    expect(screen.getAllByAltText('OdontoSys')).toHaveLength(2);
   });
 
   it('GuardaAutenticado redireciona para login quando não há sessão', () => {

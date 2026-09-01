@@ -79,19 +79,14 @@ export function Layout(): ReactElement {
       <header className="sticky top-0 z-40 border-b border-black/[0.06] bg-white/85 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-xs">
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="1.8"
-                  d="M7.2 3.8C9 2.7 10.4 3.6 12 3.6s3-1 4.8.2c2.5 1.7 2 5.2.8 7.5-1.6 3-1.4 8.9-3.7 9-1.3.1-1.1-4.7-1.9-4.7s-.6 4.8-1.9 4.7c-2.3-.1-2.1-6-3.7-9-1.2-2.3-1.7-5.8.8-7.5Z"
-                />
-              </svg>
-            </div>
-            <div>
-              <span className="text-base font-bold tracking-tight text-ink-900">OdontoSys</span>
-            </div>
+            <img
+              src="/favicon.png"
+              alt="OdontoSys"
+              width="652"
+              height="665"
+              className="h-9 w-9 rounded-xl bg-brand-50 p-1.5 object-contain shadow-xs ring-1 ring-brand-100"
+            />
+            <span className="text-base font-bold tracking-tight text-ink-900">OdontoSys</span>
           </div>
 
           <nav

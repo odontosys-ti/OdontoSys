@@ -384,6 +384,7 @@ describe('páginas da base', () => {
     vi.stubGlobal('fetch', requisicao);
 
     const layout = renderizar(<Layout />, 'ADMIN');
+    expect(screen.getByAltText('OdontoSys')).toBeInTheDocument();
     expect(screen.getAllByText('Profissionais').length).toBeGreaterThan(0);
     const menu = screen.getByRole('button', { name: 'Abrir menu' });
     fireEvent.click(menu);
