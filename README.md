@@ -1,5 +1,7 @@
 # OdontoSys — Sistema de Gestão para Clínicas Odontológicas
 
+> **SPRINT 0 CONGELADA.** A base está encerrada; novas alterações devem pertencer a um incremento planejado. Veja [o registro de congelamento](docs/sprint-0-congelada.md).
+
 Sprint 0: fundação (autenticação, cadastros, agendamento simples, auditoria, testes, UI Apple HIG e CI). As estórias US-01 a US-08 **não** estão neste código.
 
 ---
