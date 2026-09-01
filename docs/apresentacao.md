@@ -139,7 +139,7 @@ Isso é UX aplicada ao problema, não apenas decoração: uma recepcionista prec
 Para executar o projeto:
 
 ```bash
-bun run up
+bun run dev
 ```
 
 Acesse `http://localhost:5173` com uma das credenciais demo:

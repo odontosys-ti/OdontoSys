@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { copyFileSync, existsSync } from 'node:fs';
+import { copyFileSync, existsSync, readFileSync } from 'node:fs';
 import { createConnection } from 'node:net';
 import { join } from 'node:path';
 
@@ -7,79 +7,47 @@ const ROOT_DIR = process.cwd();
 const ENV_PATH = join(ROOT_DIR, '.env');
 const ENV_EXAMPLE_PATH = join(ROOT_DIR, '.env.example');
 
-// Utilitários de formatação de console
-const c = {
+const cor = {
   reset: '\x1b[0m',
-  bold: '\x1b[1m',
-  dim: '\x1b[2m',
-  green: '\x1b[32m',
-  blue: '\x1b[34m',
   cyan: '\x1b[36m',
-  yellow: '\x1b[33m',
+  green: '\x1b[32m',
   red: '\x1b[31m',
-  magenta: '\x1b[35m',
 };
 
 function log(mensagem: string): void {
-  console.log(`${c.cyan}[OdontoSys]${c.reset} ${mensagem}`);
+  console.log(`${cor.cyan}[OdontoSys]${cor.reset} ${mensagem}`);
 }
 
-function logSucesso(mensagem: string): void {
-  console.log(`${c.green}✔ ${mensagem}${c.reset}`);
+function sucesso(mensagem: string): void {
+  console.log(`${cor.green}✔ ${mensagem}${cor.reset}`);
 }
 
-function logErro(mensagem: string): void {
-  console.error(`${c.red}✖ ${mensagem}${c.reset}`);
+function erro(mensagem: string): void {
+  console.error(`${cor.red}✖ ${mensagem}${cor.reset}`);
 }
 
-function executarComando(comando: string, args: string[]): Promise<number> {
+function executarComando(
+  comando: string,
+  args: string[],
+  ambiente?: NodeJS.ProcessEnv
+): Promise<number> {
   return new Promise((resolve) => {
-    const proc = spawn(comando, args, {
+    const processo = spawn(comando, args, {
       cwd: ROOT_DIR,
+      env: ambiente ? { ...process.env, ...ambiente } : process.env,
       stdio: 'inherit',
       shell: false,
     });
-    proc.on('close', (code) => resolve(code ?? 0));
-    proc.on('error', () => resolve(1));
+    processo.on('close', (codigo) => resolve(codigo ?? 1));
+    processo.on('error', () => resolve(1));
   });
 }
 
-async function iniciarServico(
-  nome: string,
-  comando: string,
-  args: string[],
-  porta: number,
-  processos: ChildProcess[]
-): Promise<void> {
-  if (await testarPorta(porta)) {
-    logSucesso(`${nome} já está ativo na porta ${porta}; processo duplicado evitado.`);
-    return;
-  }
-  const processo = spawn(comando, args, {
-    cwd: ROOT_DIR,
-    stdio: 'inherit',
-    shell: false,
-  });
-  processos.push(processo);
-  processo.once('error', () => logErro(`Falha ao iniciar ${nome}.`));
-  processo.once('exit', (codigo) => {
-    if (codigo !== null && codigo !== 0) {
-      logErro(`${nome} encerrou com código ${codigo}.`);
-    }
-  });
-  if (!(await aguardarPorta(porta, 20))) {
-    processo.kill('SIGTERM');
-    throw new Error(`${nome} não respondeu na porta ${porta}.`);
-  }
-  logSucesso(`${nome} pronto na porta ${porta}.`);
-}
-
-async function testarPorta(porta: number, timeoutMs = 800): Promise<boolean> {
-  const hosts = ['localhost', '127.0.0.1', '::1'];
-  for (const host of hosts) {
-    const ok = await new Promise<boolean>((resolve) => {
+async function testarPorta(porta: number): Promise<boolean> {
+  for (const host of ['localhost', '127.0.0.1', '::1']) {
+    const disponivel = await new Promise<boolean>((resolve) => {
       const socket = createConnection({ port: porta, host });
-      socket.setTimeout(timeoutMs);
+      socket.setTimeout(800);
       socket.on('connect', () => {
         socket.destroy();
         resolve(true);
@@ -93,221 +61,272 @@ async function testarPorta(porta: number, timeoutMs = 800): Promise<boolean> {
         resolve(false);
       });
     });
-    if (ok) return true;
+    if (disponivel) return true;
   }
   return false;
 }
 
-async function aguardarPorta(porta: number, maxTentativas = 30): Promise<boolean> {
-  for (let i = 0; i < maxTentativas; i++) {
-    const pronto = await testarPorta(porta);
-    if (pronto) return true;
+async function aguardarPorta(porta: number, tentativas = 30): Promise<boolean> {
+  for (let tentativa = 0; tentativa < tentativas; tentativa++) {
+    if (await testarPorta(porta)) return true;
     await new Promise((res) => setTimeout(res, 500));
   }
   return false;
 }
 
-// 1. Comando: START
-async function comandoStart(): Promise<void> {
-  console.log(`
-${c.blue}${c.bold}======================================================
-  🦷 OdontoSys — Inicialização Inteligente do Sistema
-======================================================${c.reset}
-`);
-
-  // Passo 1: Garantir .env
-  if (!existsSync(ENV_PATH)) {
-    log(`Arquivo .env não encontrado. Criando a partir de .env.example...`);
-    copyFileSync(ENV_EXAMPLE_PATH, ENV_PATH);
-    logSucesso('Arquivo .env criado com sucesso.');
+async function iniciarServico(
+  nome: string,
+  comando: string,
+  args: string[],
+  porta: number,
+  processos: ChildProcess[],
+  ambiente?: NodeJS.ProcessEnv
+): Promise<void> {
+  if (await testarPorta(porta)) {
+    sucesso(`${nome} já está ativo em :${porta}.`);
+    return;
   }
 
-  // Passo 2: Subir containers Docker
-  log('Verificando e iniciando containers do banco de dados (PostgreSQL)...');
-  const codeDocker = await executarComando('docker', ['compose', 'up', '-d']);
-  if (codeDocker !== 0) {
-    logErro(
-      'Falha ao iniciar os containers do Docker. Certifique-se de que o Docker está rodando.'
-    );
-    process.exit(1);
+  const processo = spawn(comando, args, {
+    cwd: ROOT_DIR,
+    env: ambiente ? { ...process.env, ...ambiente } : process.env,
+    stdio: 'inherit',
+    shell: false,
+  });
+  processos.push(processo);
+  processo.once('error', () => erro(`Falha ao iniciar ${nome}.`));
+  processo.once('exit', (codigo) => {
+    if (codigo !== null && codigo !== 0) erro(`${nome} encerrou com código ${codigo}.`);
+  });
+
+  if (!(await aguardarPorta(porta))) {
+    processo.kill('SIGTERM');
+    throw new Error(`${nome} não respondeu em :${porta}.`);
+  }
+  sucesso(`${nome} pronto em :${porta}.`);
+}
+
+function garantirEnv(modo: 'dev' | 'production'): void {
+  if (existsSync(ENV_PATH)) return;
+  if (modo === 'production') {
+    throw new Error('Crie o arquivo .env antes de executar bun run production.');
+  }
+  copyFileSync(ENV_EXAMPLE_PATH, ENV_PATH);
+  sucesso('.env criado a partir de .env.example.');
+}
+
+function carregarEnvLocal(): void {
+  const texto = readFileSync(ENV_PATH, 'utf8');
+  for (const linha of texto.split('\n')) {
+    const trimmed = linha.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const separador = trimmed.indexOf('=');
+    if (separador < 0) continue;
+    const chave = trimmed.slice(0, separador).trim();
+    const valor = trimmed.slice(separador + 1).trim();
+    if (process.env[chave] === undefined) process.env[chave] = valor;
+  }
+}
+
+async function prepararBanco({ testes, seed }: { testes: boolean; seed: boolean }): Promise<void> {
+  log('Subindo PostgreSQL local...');
+  const servicos = testes ? [] : ['postgres-dev'];
+  if ((await executarComando('docker', ['compose', 'up', '-d', ...servicos])) !== 0) {
+    throw new Error('Docker não iniciou. Confira se o Docker Desktop está ativo.');
   }
 
-  // Passo 3: Aguardar banco de dados
-  log('Aguardando banco de dados responder na porta 5432...');
-  const bancoDevPronto = await aguardarPorta(5432);
-  const bancoTestPronto = await aguardarPorta(5433);
+  const bancoDev = await aguardarPorta(5432);
+  const bancoTest = !testes || (await aguardarPorta(5433));
+  if (!bancoDev || !bancoTest) throw new Error('Timeout aguardando PostgreSQL.');
+  sucesso(testes ? 'PostgreSQL dev/test pronto.' : 'PostgreSQL dev pronto.');
 
-  if (!bancoDevPronto || !bancoTestPronto) {
-    logErro('Timeout aguardando inicialização do PostgreSQL.');
-    process.exit(1);
-  }
-  logSucesso('Bancos de dados de desenvolvimento (5432) e testes (5433) prontos!');
-
-  // Passo 4: Executar migrações e seed
-  log('Aplicando migrações e dados de seed...');
-  const codeMigrate = await executarComando('pnpm', [
-    '--filter=@odontosys/api',
-    'run',
-    'db:migrate',
-  ]);
-  if (codeMigrate !== 0) {
-    logErro('Falha ao aplicar migrações do banco.');
-    process.exit(1);
+  log('Aplicando migrações...');
+  if ((await executarComando('pnpm', ['db:migrate'])) !== 0) {
+    throw new Error('Falha ao aplicar migrações.');
   }
 
-  const codeSeed = await executarComando('pnpm', ['--filter=@odontosys/api', 'run', 'db:seed']);
-  if (codeSeed !== 0) {
-    logErro('Falha ao semear banco de dados.');
-    process.exit(1);
-  }
-  logSucesso('Migrações aplicadas e seed garantido com sucesso.');
-
-  // Passo 5: Exibir Banner de Serviços
-  console.log(`
-${c.green}${c.bold}✔ Todos os serviços e dependências estão prontos!${c.reset}
-
-${c.bold}Endereços Locais:${c.reset}
-  🌐 ${c.cyan}Aplicação Web (React/Tailwind):${c.reset} ${c.bold}http://localhost:5173${c.reset}
-  ⚙️  ${c.cyan}API Backend (Fastify):${c.reset}         ${c.bold}http://localhost:3333${c.reset}
-  📖 ${c.cyan}Documentação Swagger / OpenAPI:${c.reset} ${c.bold}http://localhost:3333/docs${c.reset}
-
-${c.bold}Credenciais Demo (Seed):${c.reset}
-  👤 ${c.yellow}Recepção:${c.reset} recepcao@odontosys.local / senha123
-  👤 ${c.blue}Dentista:${c.reset} dentista@odontosys.local / senha123
-  👤 ${c.magenta}Admin:${c.reset}    admin@odontosys.local    / senha123
-
-${c.dim}Pressione Ctrl+C a qualquer momento para encerrar todos os processos.${c.reset}
-`);
-
-  // Passo 6: Iniciar processos da API e Web em paralelo com graceful shutdown
-  const processos: ChildProcess[] = [];
-
-  const pararProcessos = () => {
-    for (const proc of processos) {
-      if (!proc.killed) proc.kill('SIGTERM');
+  if (seed) {
+    log('Garantindo dados demo...');
+    if ((await executarComando('pnpm', ['db:seed'])) !== 0) {
+      throw new Error('Falha ao executar seed.');
     }
+  }
+  sucesso('Banco pronto.');
+}
+
+function ambienteProducao(): NodeJS.ProcessEnv {
+  return {
+    NODE_ENV: 'production',
+    WEB_ORIGIN: process.env.ODONTOSYS_PUBLIC_ORIGIN ?? 'https://odontosys.devstank.com.br',
+    VITE_API_URL: '/api/v1',
   };
-  const encerrar = () => {
-    log('Encerrando processos da API e Web...');
-    pararProcessos();
+}
+
+function configurarEncerramento(processos: ChildProcess[]): void {
+  let encerrando = false;
+  const encerrar = (): void => {
+    if (encerrando) return;
+    encerrando = true;
+    log('Encerrando serviços...');
+    for (const processo of processos) {
+      if (!processo.killed) processo.kill('SIGTERM');
+    }
     process.exit(0);
   };
+  process.once('SIGINT', encerrar);
+  process.once('SIGTERM', encerrar);
+}
 
-  process.on('SIGINT', encerrar);
-  process.on('SIGTERM', encerrar);
-
+async function iniciarServicos(
+  servicos: Array<{
+    nome: string;
+    comando: string;
+    args: string[];
+    porta: number;
+  }>,
+  ambiente?: NodeJS.ProcessEnv
+): Promise<void> {
+  const processos: ChildProcess[] = [];
+  configurarEncerramento(processos);
   try {
-    await Promise.all([
-      iniciarServico(
-        'API Backend',
-        'pnpm',
-        ['--filter=@odontosys/api', 'run', 'dev'],
-        3333,
-        processos
-      ),
-      iniciarServico(
-        'Web Frontend',
-        'pnpm',
-        ['--filter=@odontosys/web', 'run', 'dev', '--', '--strictPort'],
-        5173,
-        processos
-      ),
-    ]);
-  } catch (erro) {
-    pararProcessos();
-    throw erro;
+    await Promise.all(
+      servicos.map((servico) =>
+        iniciarServico(
+          servico.nome,
+          servico.comando,
+          servico.args,
+          servico.porta,
+          processos,
+          ambiente
+        )
+      )
+    );
+  } catch (cause) {
+    for (const processo of processos) {
+      if (!processo.killed) processo.kill('SIGTERM');
+    }
+    throw cause;
   }
 }
 
-// 2. Comando: STOP
+async function comandoDev(): Promise<void> {
+  garantirEnv('dev');
+  carregarEnvLocal();
+  await prepararBanco({ testes: true, seed: true });
+  log('Iniciando desenvolvimento...');
+  await iniciarServicos([
+    {
+      nome: 'API dev',
+      comando: 'pnpm',
+      args: ['--filter=@odontosys/api', 'run', 'dev'],
+      porta: 3333,
+    },
+    {
+      nome: 'Web dev',
+      comando: 'pnpm',
+      args: ['--filter=@odontosys/web', 'run', 'dev'],
+      porta: 5173,
+    },
+  ]);
+}
+
+async function comandoProduction(): Promise<void> {
+  garantirEnv('production');
+  carregarEnvLocal();
+  if (await testarPorta(3333)) {
+    throw new Error(
+      'A API :3333 já está ativa. Encerre o ambiente dev antes de iniciar production.'
+    );
+  }
+  if (await testarPorta(4173)) {
+    throw new Error(
+      'A Web production :4173 já está ativa. Encerre o processo anterior antes de reiniciar.'
+    );
+  }
+  const ambiente = ambienteProducao();
+  await prepararBanco({ testes: false, seed: false });
+
+  log('Gerando build de produção...');
+  if ((await executarComando('pnpm', ['build'], ambiente)) !== 0) {
+    throw new Error('Falha no build de produção.');
+  }
+  sucesso('Build pronto.');
+
+  log('Iniciando produção local para o túnel...');
+  await iniciarServicos(
+    [
+      {
+        nome: 'API produção',
+        comando: 'node',
+        args: ['--import', 'tsx', 'apps/api/dist/main.js'],
+        porta: 3333,
+      },
+      {
+        nome: 'Web produção',
+        comando: 'pnpm',
+        args: ['--filter=@odontosys/web', 'run', 'preview'],
+        porta: 4173,
+      },
+    ],
+    ambiente
+  );
+}
+
 async function comandoStop(): Promise<void> {
-  console.log(`
-${c.yellow}${c.bold}======================================================
-  🛑 OdontoSys — Parada Completa do Sistema
-======================================================${c.reset}
-`);
-
-  log('Parando containers do Docker (PostgreSQL dev & test)...');
-  await executarComando('docker', ['compose', 'stop']);
-  logSucesso('Containers parados com sucesso.');
-
-  console.log(`
-${c.green}${c.bold}✔ Sistema OdontoSys pausado com sucesso!${c.reset}
-    ${c.dim}Para iniciar novamente, execute: bun run up (ou pnpm run up)${c.reset}
-`);
+  if ((await executarComando('docker', ['compose', 'stop'])) !== 0) {
+    throw new Error('Falha ao parar os containers.');
+  }
+  sucesso(
+    'PostgreSQL parado. Serviços web/API terminam com Ctrl+C no terminal em que foram iniciados.'
+  );
 }
 
-// 3. Comando: DOWN
 async function comandoDown(): Promise<void> {
-  console.log(`
-${c.yellow}${c.bold}======================================================
-  🛑 OdontoSys — Desligamento Completo dos Containers
-======================================================${c.reset}
-`);
-
-  log('Removendo containers e redes do Docker...');
-  await executarComando('docker', ['compose', 'down']);
-  logSucesso('Containers e redes removidos.');
+  if ((await executarComando('docker', ['compose', 'down'])) !== 0) {
+    throw new Error('Falha ao remover os containers.');
+  }
+  sucesso('Containers e rede removidos.');
 }
 
-// 4. Comando: STATUS
 async function comandoStatus(): Promise<void> {
-  console.log(`
-${c.cyan}${c.bold}======================================================
-  📊 OdontoSys — Status dos Serviços
-======================================================${c.reset}
-`);
-
-  const pgDev = await testarPorta(5432);
-  const pgTest = await testarPorta(5433);
-  const apiHttp = await testarPorta(3333);
-  const webHttp = await testarPorta(5173);
-
-  console.log(
-    `  PostgreSQL Dev (5432):  ${pgDev ? `${c.green}● Rodando${c.reset}` : `${c.red}○ Parado${c.reset}`}`
-  );
-  console.log(
-    `  PostgreSQL Test (5433): ${pgTest ? `${c.green}● Rodando${c.reset}` : `${c.red}○ Parado${c.reset}`}`
-  );
-  console.log(
-    `  API Backend (3333):     ${apiHttp ? `${c.green}● Ativa (http://localhost:3333)${c.reset}` : `${c.red}○ Inativa${c.reset}`}`
-  );
-  console.log(
-    `  Web Frontend (5173):    ${webHttp ? `${c.green}● Ativa (http://localhost:5173)${c.reset}` : `${c.red}○ Inativa${c.reset}`}`
-  );
-  console.log('');
+  const [pgDev, pgTest, api, webDev, webProduction] = await Promise.all([
+    testarPorta(5432),
+    testarPorta(5433),
+    testarPorta(3333),
+    testarPorta(5173),
+    testarPorta(4173),
+  ]);
+  const estado = (ativo: boolean): string =>
+    ativo ? `${cor.green}●${cor.reset}` : `${cor.red}○${cor.reset}`;
+  console.log(`PostgreSQL dev : ${estado(pgDev)}  | PostgreSQL test: ${estado(pgTest)}`);
+  console.log(`API :3333       ${estado(api)}  | Web dev :5173   ${estado(webDev)}`);
+  console.log(`Web production :4173 ${estado(webProduction)}`);
 }
 
-// Roteador de comandos da CLI
-const acao = process.argv[2] ?? 'start';
-
-switch (acao) {
-  case 'start':
-  case 'up':
-    comandoStart().catch((err) => {
-      logErro(String(err));
-      process.exit(1);
-    });
-    break;
-  case 'stop':
-    comandoStop().catch((err) => {
-      logErro(String(err));
-      process.exit(1);
-    });
-    break;
-  case 'down':
-    comandoDown().catch((err) => {
-      logErro(String(err));
-      process.exit(1);
-    });
-    break;
-  case 'status':
-    comandoStatus().catch((err) => {
-      logErro(String(err));
-      process.exit(1);
-    });
-    break;
-  default:
-    logErro(`Comando desconhecido: ${acao}. Use: start, stop, down ou status.`);
-    process.exit(1);
+async function main(): Promise<void> {
+  const acao = process.argv[2] ?? 'dev';
+  switch (acao) {
+    case 'dev':
+      await comandoDev();
+      return;
+    case 'production':
+      await comandoProduction();
+      return;
+    case 'stop':
+      await comandoStop();
+      return;
+    case 'down':
+      await comandoDown();
+      return;
+    case 'status':
+      await comandoStatus();
+      return;
+    default:
+      throw new Error(`Comando desconhecido: ${acao}. Use dev, production, stop, down ou status.`);
+  }
 }
+
+main().catch((cause: unknown) => {
+  erro(cause instanceof Error ? cause.message : 'Falha inesperada.');
+  process.exit(1);
+});
