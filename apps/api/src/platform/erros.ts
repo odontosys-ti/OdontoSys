@@ -7,6 +7,10 @@ export const CatalogoErros = {
     status: 409,
     mensagem: 'O profissional já possui atendimento nesse horário.',
   },
+  PACIENTE_BLOQUEADO: {
+    status: 422,
+    mensagem: 'Paciente bloqueado por faltas recorrentes; informe uma justificativa para liberar.',
+  },
   REGRA_NEGOCIO: { status: 422, mensagem: 'Violação de regra de negócio' },
   ERRO_INTERNO: { status: 500, mensagem: 'Erro interno do servidor' },
 } as const;

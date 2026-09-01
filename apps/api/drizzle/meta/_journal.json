@@ -15,6 +15,20 @@
       "when": 1788282828528,
       "tag": "0001_adiciona_atualizacao_auditoria",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788286994631,
+      "tag": "0002_steady_johnny_storm",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1788287507736,
+      "tag": "0003_corrige_conflito_status",
+      "breakpoints": true
     }
   ]
 }

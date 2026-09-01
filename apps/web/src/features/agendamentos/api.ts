@@ -1,10 +1,13 @@
 import {
   SchemaAgendamentoResponse,
+  SchemaAtualizarStatusAgendamento,
+  SchemaAgendamentosDiaQuery,
   SchemaAtualizarAgendamento,
   SchemaCriarAgendamento,
   SchemaListaAgendamentos,
   type AtualizarAgendamentoRequest,
   type CriarAgendamentoRequest,
+  type StatusAgendamento,
 } from '@odontosys/contracts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -19,6 +22,18 @@ export function useAgendamentos(de: string, ate: string, profissionalId: string)
   });
 }
 
+export function useAgendamentosDia(data: string, profissionalId: string) {
+  const params = new URLSearchParams({ data });
+  if (profissionalId) params.set('profissionalId', profissionalId);
+  return useQuery({
+    queryKey: ['agendamentos-dia', data, profissionalId],
+    queryFn: () => {
+      SchemaAgendamentosDiaQuery.parse({ data, profissionalId: profissionalId || undefined });
+      return api(`/agendamentos/dia?${params.toString()}`, SchemaListaAgendamentos);
+    },
+  });
+}
+
 export function useCriarAgendamento() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -27,7 +42,10 @@ export function useCriarAgendamento() {
         method: 'POST',
         body: JSON.stringify(SchemaCriarAgendamento.parse(payload)),
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['agendamentos'] }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['agendamentos'] });
+      void queryClient.invalidateQueries({ queryKey: ['agendamentos-dia'] });
+    },
   });
 }
 
@@ -39,7 +57,10 @@ export function useReagendarAgendamento(id: string | undefined) {
         method: 'PATCH',
         body: JSON.stringify(SchemaAtualizarAgendamento.parse(payload)),
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['agendamentos'] }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['agendamentos'] });
+      void queryClient.invalidateQueries({ queryKey: ['agendamentos-dia'] });
+    },
   });
 }
 
@@ -48,6 +69,24 @@ export function useCancelarAgendamento() {
   return useMutation({
     mutationFn: (id: string) =>
       api(`/agendamentos/${id}`, SchemaAgendamentoResponse, { method: 'DELETE' }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['agendamentos'] }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['agendamentos'] });
+      void queryClient.invalidateQueries({ queryKey: ['agendamentos-dia'] });
+    },
+  });
+}
+
+export function useAtualizarStatusAgendamento() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, status }: { id: string; status: StatusAgendamento }) =>
+      api(`/agendamentos/${id}/status`, SchemaAgendamentoResponse, {
+        method: 'PATCH',
+        body: JSON.stringify(SchemaAtualizarStatusAgendamento.parse({ status })),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['agendamentos'] });
+      void queryClient.invalidateQueries({ queryKey: ['agendamentos-dia'] });
+    },
   });
 }

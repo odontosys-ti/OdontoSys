@@ -1,6 +1,6 @@
-import type { MeResponse } from '@odontosys/contracts';
+import type { MeResponse, StatusAgendamento } from '@odontosys/contracts';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -97,10 +97,26 @@ function fetchRecursos(entrada: string | URL | Request, init?: RequestInit): Pro
     if (url.includes('procedimentos')) return resposta(procedimento);
     return resposta(agendamento);
   }
-  if (url.includes('/agendamentos?')) return resposta({ dados: [agendamento], paginacao });
+  if (url.includes('/agendamentos?') || url.includes('/agendamentos/dia?')) {
+    return resposta({ dados: [agendamento], paginacao });
+  }
   if (url.includes('/pacientes?')) return resposta({ dados: [paciente], paginacao });
   if (url.includes('/profissionais?')) return resposta({ dados: [profissional], paginacao });
   return resposta({ dados: [procedimento], paginacao });
+}
+
+function fetchRecursosComStatus(
+  status: StatusAgendamento
+): (entrada: string | URL | Request, init?: RequestInit) => Promise<Response> {
+  return (entrada, init) => {
+    const recurso = { ...agendamento, status };
+    const url = String(entrada);
+    if (['POST', 'PATCH', 'DELETE'].includes(init?.method ?? '')) return resposta(recurso);
+    if (url.includes('/agendamentos/dia?')) return resposta({ dados: [recurso], paginacao });
+    if (url.includes('/pacientes?')) return resposta({ dados: [paciente], paginacao });
+    if (url.includes('/profissionais?')) return resposta({ dados: [profissional], paginacao });
+    return resposta({ dados: [procedimento], paginacao });
+  };
 }
 
 afterEach(() => {
@@ -146,6 +162,91 @@ describe('páginas da base', () => {
     expect((await screen.findAllByText('Ana Lima')).length).toBeGreaterThan(0);
     expect(screen.queryByRole('button', { name: /reagendar/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /cancelar agendamento/i })).not.toBeInTheDocument();
+  });
+
+  it('permite navegar na agenda diária e filtrar por profissional', async () => {
+    const requisicao = vi.fn(fetchRecursos);
+    vi.stubGlobal('fetch', requisicao);
+    renderizar(<PaginaAgendamentos />, 'RECEPCAO');
+    expect(await screen.findAllByText('Ana Lima')).not.toHaveLength(0);
+    const data = screen.getByLabelText('Data da agenda');
+    const valorInicial = (data as HTMLInputElement).value;
+    fireEvent.click(screen.getByRole('button', { name: 'Próximo dia' }));
+    await waitFor(() =>
+      expect((screen.getByLabelText('Data da agenda') as HTMLInputElement).value).not.toBe(
+        valorInicial
+      )
+    );
+    fireEvent.change(screen.getByLabelText('Profissional'), { target: { value: id.profissional } });
+    await waitFor(() =>
+      expect(requisicao).toHaveBeenCalledWith(
+        expect.stringContaining('/agendamentos/dia?'),
+        expect.anything()
+      )
+    );
+  });
+
+  it('permite confirmar um agendamento e informa o resultado', async () => {
+    const requisicao = vi.fn(fetchRecursos);
+    vi.stubGlobal('fetch', requisicao);
+    renderizar(<PaginaAgendamentos />, 'RECEPCAO');
+    const confirmar = await screen.findAllByRole('button', { name: 'Confirmar' });
+    fireEvent.click(confirmar[0]);
+    expect(await screen.findByText('Presença confirmada.')).toBeInTheDocument();
+    expect(requisicao).toHaveBeenCalledWith(
+      expect.stringContaining(`/agendamentos/${id.agendamento}/status`),
+      expect.objectContaining({ method: 'PATCH' })
+    );
+  });
+
+  it('exibe somente a ação compatível com agendamento confirmado', async () => {
+    vi.stubGlobal('fetch', vi.fn(fetchRecursosComStatus('CONFIRMADO')));
+    renderizar(<PaginaAgendamentos />, 'RECEPCAO');
+    expect(await screen.findAllByRole('button', { name: 'Marcar atendido' })).not.toHaveLength(0);
+    expect(screen.queryByRole('button', { name: 'Confirmar' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Marcar falta' })).not.toBeInTheDocument();
+  });
+
+  it('solicita justificativa quando a API bloqueia novo agendamento', async () => {
+    const requisicao = vi.fn((entrada: string | URL | Request, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              erro: {
+                codigo: 'PACIENTE_BLOQUEADO',
+                mensagem:
+                  'Paciente bloqueado por faltas recorrentes; informe uma justificativa para liberar.',
+                detalhes: [],
+              },
+              requestId: '01900000-0000-7000-8000-000000000099',
+            }),
+            { status: 422 }
+          )
+        );
+      }
+      return fetchRecursos(entrada, init);
+    });
+    vi.stubGlobal('fetch', requisicao);
+    renderizar(<PaginaAgendamentos />, 'RECEPCAO');
+    fireEvent.click(await screen.findByRole('button', { name: /novo agendamento/i }));
+    const dialogo = screen.getByRole('dialog', { name: 'Novo agendamento' });
+    fireEvent.change(within(dialogo).getByLabelText('Paciente'), {
+      target: { value: id.paciente },
+    });
+    fireEvent.change(within(dialogo).getByLabelText('Profissional'), {
+      target: { value: id.profissional },
+    });
+    fireEvent.change(within(dialogo).getByLabelText('Procedimento'), {
+      target: { value: id.procedimento },
+    });
+    fireEvent.change(within(dialogo).getByLabelText('Data e horário de início'), {
+      target: { value: '2099-01-01T10:00' },
+    });
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Agendar' }));
+    expect(
+      await screen.findByLabelText('Justificativa para liberar o bloqueio')
+    ).toBeInTheDocument();
   });
 
   it('salva um novo paciente com campos controlados', async () => {

@@ -1,6 +1,7 @@
-import type { AgendamentoResponse } from '@odontosys/contracts';
-import { useMemo, useState, type ReactElement } from 'react';
+import type { AgendamentoResponse, StatusAgendamento } from '@odontosys/contracts';
+import { useState, type ReactElement } from 'react';
 
+import { ApiError } from '../../shared/api/client';
 import { papelPermite, useSessao } from '../../shared/api/hooks';
 import {
   Button,
@@ -22,22 +23,12 @@ import { usePacientes } from '../pacientes/api';
 import { useProcedimentos } from '../procedimentos/api';
 import { useProfissionais } from '../profissionais/api';
 import {
-  useAgendamentos,
+  useAgendamentosDia,
+  useAtualizarStatusAgendamento,
   useCancelarAgendamento,
   useCriarAgendamento,
   useReagendarAgendamento,
 } from './api';
-
-function paraCampoData(valor: Date | string): string {
-  const data = typeof valor === 'string' ? new Date(valor) : valor;
-  const local = new Date(data.getTime() - data.getTimezoneOffset() * 60_000);
-  return local.toISOString().slice(0, 16);
-}
-
-function paraIso(valor: string, fallback: string): string {
-  const data = new Date(valor);
-  return Number.isNaN(data.getTime()) ? fallback : data.toISOString();
-}
 
 function formatarHorario(valor: string): string {
   return new Date(valor).toLocaleString('pt-BR', {
@@ -49,27 +40,28 @@ function formatarHorario(valor: string): string {
   });
 }
 
+function dataHoje(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function deslocarData(data: string, dias: number): string {
+  const valor = new Date(`${data}T12:00:00.000Z`);
+  valor.setUTCDate(valor.getUTCDate() + dias);
+  return valor.toISOString().slice(0, 10);
+}
+
 export function PaginaAgendamentos(): ReactElement {
-  const periodo = useMemo(() => {
-    const agora = new Date();
-    return {
-      de: new Date(agora.getTime() - 24 * 60 * 60 * 1_000).toISOString(),
-      ate: new Date(agora.getTime() + 14 * 24 * 60 * 60 * 1_000).toISOString(),
-    };
-  }, []);
-  const [de, setDe] = useState(() => paraCampoData(periodo.de));
-  const [ate, setAte] = useState(() => paraCampoData(periodo.ate));
+  const [data, setData] = useState(dataHoje);
   const [filtroProfissional, setFiltroProfissional] = useState('');
-  const deIso = paraIso(de, periodo.de);
-  const ateIso = paraIso(ate, periodo.ate);
 
   const sessao = useSessao();
-  const consulta = useAgendamentos(deIso, ateIso, filtroProfissional);
+  const consulta = useAgendamentosDia(data, filtroProfissional);
   const pacientes = usePacientes('');
   const profissionais = useProfissionais();
   const procedimentos = useProcedimentos();
   const criar = useCriarAgendamento();
   const cancelar = useCancelarAgendamento();
+  const atualizarStatus = useAtualizarStatusAgendamento();
   const toast = useToast();
   const podeEditar = papelPermite(sessao.data?.papel, ['RECEPCAO', 'ADMIN']);
 
@@ -78,6 +70,7 @@ export function PaginaAgendamentos(): ReactElement {
   const [profissionalId, setProfissionalId] = useState('');
   const [procedimentoId, setProcedimentoId] = useState('');
   const [inicio, setInicio] = useState('');
+  const [justificativaLiberacao, setJustificativaLiberacao] = useState('');
   const [reagendando, setReagendando] = useState<AgendamentoResponse>();
   const [novoInicio, setNovoInicio] = useState('');
   const reagendar = useReagendarAgendamento(reagendando?.id);
@@ -98,16 +91,35 @@ export function PaginaAgendamentos(): ReactElement {
     setProfissionalId('');
     setProcedimentoId('');
     setInicio('');
+    setJustificativaLiberacao('');
     criar.reset();
   };
   const abrirReagendamento = (item: AgendamentoResponse) => {
     setReagendando(item);
-    setNovoInicio(paraCampoData(item.inicio));
+    setNovoInicio(new Date(item.inicio).toISOString().slice(0, 16));
   };
   const fecharReagendamento = () => {
     setReagendando(undefined);
     setNovoInicio('');
     reagendar.reset();
+  };
+
+  const mudarStatus = (item: AgendamentoResponse, status: StatusAgendamento) => {
+    atualizarStatus.mutate(
+      { id: item.id, status },
+      {
+        onSuccess: () => {
+          const mensagens: Record<StatusAgendamento, string> = {
+            AGENDADO: 'Agendamento reaberto.',
+            CONFIRMADO: 'Presença confirmada.',
+            FALTOU: 'Falta registrada.',
+            ATENDIDO: 'Atendimento concluído.',
+            CANCELADO: 'Agendamento cancelado.',
+          };
+          toast.mostrar(mensagens[status]);
+        },
+      }
+    );
   };
 
   if (consulta.isLoading) return <Spinner texto="Carregando agendamentos…" />;
@@ -122,19 +134,34 @@ export function PaginaAgendamentos(): ReactElement {
 
   const agendamentos = consulta.data?.dados ?? [];
   const controles = (item: AgendamentoResponse) =>
-    podeEditar && item.status === 'AGENDADO' ? (
+    podeEditar ? (
       <div className="flex flex-wrap gap-1">
-        <Button variant="ghost" size="sm" onClick={() => abrirReagendamento(item)}>
-          Reagendar
-        </Button>
-        <Button
-          variant="danger"
-          size="sm"
-          onClick={() => setCancelando(item)}
-          aria-label={`Cancelar agendamento de ${nomePaciente(item.pacienteId)}`}
-        >
-          Cancelar
-        </Button>
+        {item.status === 'AGENDADO' ? (
+          <>
+            <Button variant="ghost" size="sm" onClick={() => mudarStatus(item, 'CONFIRMADO')}>
+              Confirmar
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => mudarStatus(item, 'FALTOU')}>
+              Marcar falta
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => abrirReagendamento(item)}>
+              Reagendar
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => setCancelando(item)}
+              aria-label={`Cancelar agendamento de ${nomePaciente(item.pacienteId)}`}
+            >
+              Cancelar
+            </Button>
+          </>
+        ) : null}
+        {item.status === 'CONFIRMADO' ? (
+          <Button variant="ghost" size="sm" onClick={() => mudarStatus(item, 'ATENDIDO')}>
+            Marcar atendido
+          </Button>
+        ) : null}
       </div>
     ) : null;
 
@@ -143,7 +170,7 @@ export function PaginaAgendamentos(): ReactElement {
       <PageHeader
         contexto="Operação clínica"
         titulo="Agendamentos"
-        subtitulo="Consulta cronológica por período, com criação, reagendamento e cancelamento simples."
+        subtitulo="A agenda do dia, com horários, responsáveis e status em um só lugar."
         acao={
           podeEditar ? (
             <Button onClick={() => setModalNovo(true)}>＋ Novo agendamento</Button>
@@ -152,21 +179,33 @@ export function PaginaAgendamentos(): ReactElement {
       />
 
       <Card className="p-4 sm:p-5">
-        <div className="grid gap-3 md:grid-cols-3">
-          <Field label="Início do período">
+        <div className="grid gap-3 md:grid-cols-[auto_1fr_auto] md:items-end">
+          <Field label="Data da agenda">
             <Input
-              type="datetime-local"
-              value={de}
-              onChange={(evento) => setDe(evento.target.value)}
+              aria-label="Data da agenda"
+              type="date"
+              value={data}
+              onChange={(evento) => setData(evento.target.value)}
             />
           </Field>
-          <Field label="Fim do período">
-            <Input
-              type="datetime-local"
-              value={ate}
-              onChange={(evento) => setAte(evento.target.value)}
-            />
-          </Field>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              type="button"
+              aria-label="Dia anterior"
+              onClick={() => setData((atual) => deslocarData(atual, -1))}
+            >
+              ← Anterior
+            </Button>
+            <Button
+              variant="outline"
+              type="button"
+              aria-label="Próximo dia"
+              onClick={() => setData((atual) => deslocarData(atual, 1))}
+            >
+              Próximo →
+            </Button>
+          </div>
           <Field label="Profissional">
             <Select
               value={filtroProfissional}
@@ -182,6 +221,17 @@ export function PaginaAgendamentos(): ReactElement {
           </Field>
         </div>
       </Card>
+
+      {atualizarStatus.isError ? (
+        <ErrorState
+          mensagem="Não foi possível atualizar o status."
+          detalhe={
+            atualizarStatus.error instanceof ApiError
+              ? atualizarStatus.error.message
+              : 'Tente novamente em instantes.'
+          }
+        />
+      ) : null}
 
       {agendamentos.length === 0 ? (
         <EmptyState
@@ -267,6 +317,9 @@ export function PaginaAgendamentos(): ReactElement {
                 profissionalId,
                 procedimentoId,
                 inicio: new Date(inicio).toISOString(),
+                ...(justificativaLiberacao.trim()
+                  ? { justificativaLiberacao: justificativaLiberacao.trim() }
+                  : {}),
               },
               {
                 onSuccess: () => {
@@ -331,8 +384,25 @@ export function PaginaAgendamentos(): ReactElement {
           {criar.isError ? (
             <ErrorState
               mensagem="Não foi possível criar o agendamento."
-              detalhe="Confira o horário e possíveis conflitos."
+              detalhe={
+                criar.error instanceof ApiError && criar.error.codigo === 'PACIENTE_BLOQUEADO'
+                  ? criar.error.message
+                  : 'Confira o horário e possíveis conflitos.'
+              }
             />
+          ) : null}
+          {criar.error instanceof ApiError && criar.error.codigo === 'PACIENTE_BLOQUEADO' ? (
+            <Field label="Justificativa para liberar o bloqueio">
+              <textarea
+                className="min-h-24 w-full rounded-xl border border-black/10 bg-white px-3.5 py-3 text-sm text-ink-900 shadow-inner-xs outline-none placeholder:text-ink-400 focus:border-brand-500 focus:ring-3 focus:ring-brand-500/15"
+                value={justificativaLiberacao}
+                onChange={(evento) => setJustificativaLiberacao(evento.target.value)}
+                minLength={5}
+                maxLength={500}
+                required
+                placeholder="Registre o motivo da liberação…"
+              />
+            </Field>
           ) : null}
           <div className="flex justify-end gap-2 border-t border-black/[0.06] pt-4">
             <Button type="button" variant="ghost" onClick={fecharNovo}>

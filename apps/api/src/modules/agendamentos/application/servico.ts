@@ -5,8 +5,12 @@ import { paraIso } from '../../../platform/http/datas';
 import {
   type Agendamento,
   type IAgendamentoRepository,
+  type StatusAgendamento,
   calcularFim,
+  limitesDoDia,
+  validarBloqueioPorFaltas,
   validarInicioFuturo,
+  validarTransicaoStatus,
 } from '../domain/agendamento';
 import { AgendamentoRepository } from '../infra/agendamento.repository';
 
@@ -38,6 +42,11 @@ export class ServicoAgendamentos {
     return this.repo.listar(clinicaId, pagina, tamanho, de, ate, profissionalId);
   }
 
+  async listarDia(clinicaId: string, data: string, profissionalId?: string) {
+    const { de, ate } = limitesDoDia(data);
+    return this.listar(clinicaId, 1, 100, de, ate, profissionalId);
+  }
+
   async obter(clinicaId: string, id: string): Promise<Agendamento> {
     const encontrado = await this.repo.obterPorId(clinicaId, id);
     if (!encontrado) {
@@ -49,10 +58,18 @@ export class ServicoAgendamentos {
   async criar(
     clinicaId: string,
     usuarioId: string,
-    dados: { pacienteId: string; profissionalId: string; procedimentoId: string; inicio: Date },
+    dados: {
+      pacienteId: string;
+      profissionalId: string;
+      procedimentoId: string;
+      inicio: Date;
+      justificativaLiberacao?: string;
+    },
     agora: Date = new Date()
   ): Promise<Agendamento> {
     validarInicioFuturo(dados.inicio, agora);
+    const faltas = await this.repo.contarFaltas(clinicaId, dados.pacienteId);
+    validarBloqueioPorFaltas(faltas, dados.justificativaLiberacao);
     const { duracaoMinutos } = await this.repo.verificarRecursosAtivos(clinicaId, dados);
     const fim = calcularFim(dados.inicio, duracaoMinutos);
 
@@ -64,6 +81,7 @@ export class ServicoAgendamentos {
       inicio: dados.inicio,
       fim,
       criadoPor: usuarioId,
+      justificativaLiberacao: dados.justificativaLiberacao,
     });
   }
 
@@ -100,10 +118,29 @@ export class ServicoAgendamentos {
   }
 
   async cancelar(clinicaId: string, usuarioId: string, id: string): Promise<Agendamento> {
+    const existente = await this.repo.obterPorId(clinicaId, id);
+    if (!existente) {
+      throw new AppError('NAO_ENCONTRADO');
+    }
+    validarTransicaoStatus(existente.status, 'CANCELADO');
     const atualizado = await this.repo.cancelar(clinicaId, usuarioId, id);
     if (!atualizado) {
       throw new AppError('NAO_ENCONTRADO');
     }
+    return atualizado;
+  }
+
+  async atualizarStatus(
+    clinicaId: string,
+    usuarioId: string,
+    id: string,
+    status: StatusAgendamento
+  ): Promise<Agendamento> {
+    const existente = await this.repo.obterPorId(clinicaId, id);
+    if (!existente) throw new AppError('NAO_ENCONTRADO');
+    validarTransicaoStatus(existente.status, status);
+    const atualizado = await this.repo.atualizarStatus(clinicaId, usuarioId, id, status);
+    if (!atualizado) throw new AppError('NAO_ENCONTRADO');
     return atualizado;
   }
 }

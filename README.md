@@ -1,8 +1,8 @@
 # OdontoSys — Sistema de Gestão para Clínicas Odontológicas
 
-> **SPRINT 0 CONGELADA.** A base está encerrada; novas alterações devem pertencer a um incremento planejado. Veja [o registro de congelamento](docs/sprint-0-congelada.md).
+> **SPRINT 0 CONGELADA.** A base está encerrada; esta branch entrega a Release 1 (US-01, US-02 e US-08). Veja [o registro de congelamento](docs/sprint-0-congelada.md) e [o relatório da Release 1](docs/release-1-entregue.md).
 
-Sprint 0: fundação (autenticação, cadastros, agendamento simples, auditoria, testes, UI Apple HIG e CI). As estórias US-01 a US-08 **não** estão neste código.
+Sprint 0: fundação (autenticação, cadastros, agendamento simples, auditoria, testes, UI Apple HIG e CI). Release 1: agenda diária, status operacionais e proteção contra faltas reincidentes.
 
 ---
 
@@ -15,7 +15,7 @@ Você pode subir ou parar **todo o ecossistema** com **um único comando intelig
 | **`pnpm run up`** _(ou `pnpm dev`)_ | 🚀 **Rodar Tudo**         | 1. Cria `.env` se não existir.<br>2. Sobe containers Docker (`postgres-dev` e `postgres-test`).<br>3. Aguarda portas 5432/5433 responderem.<br>4. Executa migrações e seed idempotente.<br>5. Inicia API Fastify e Web React em paralelo.<br>6. Trata Ctrl+C com encerramento gracioso de todos os processos. |
 | **`pnpm down`**                     | 🛑 **Parar Tudo**         | Para e desliga containers Docker e libera todos os processos.                                                                                                                                                                                                                                                 |
 | **`pnpm status`**                   | 📊 **Verificar Saúde**    | Exibe o status em tempo real de cada serviço (Postgres Dev/Test, API e Web).                                                                                                                                                                                                                                  |
-| **`pnpm check`**                    | 🧪 **Validar Qualidade**  | Executa Linter, Prettier, TypeScript Strict, 29 Testes automatizados e Build.                                                                                                                                                                                                                                 |
+| **`pnpm check`**                    | 🧪 **Validar Qualidade**  | Executa Linter, Prettier, TypeScript Strict, 65 testes automatizados e Build.                                                                                                                                                                                                                                 |
 | **`pnpm check:fix`**                | ✨ **Formatar e Validar** | Auto-formata com Prettier e executa o `pnpm check`.                                                                                                                                                                                                                                                           |
 
 ---
@@ -82,6 +82,6 @@ A interface web (`apps/web`) utiliza o Design System próprio baseado no **Apple
 
 ---
 
-## 🚫 Fora desta base (Sprint 0)
+## 🚫 Fora desta entrega
 
-Agenda do dia, status `CONFIRMADO`/`FALTOU`/`ATENDIDO`, telefone/consentimento, mensageria (WhatsApp/SMS), rotinas cron/workers, relatórios e bloqueio de faltantes pertencem às estórias de incremento **US-01 a US-08**.
+Telefone/consentimento, mensageria (WhatsApp/SMS), rotinas cron/workers e relatórios permanecem fora desta Release 1 e pertencem aos próximos incrementos planejados.

@@ -173,6 +173,9 @@ export function Badge({
 export function StatusBadge({ status }: { status: string }): ReactNode {
   const mapa: Record<string, { texto: string; variante: BadgeVariant; ponto?: string }> = {
     AGENDADO: { texto: 'Agendado', variante: 'success', ponto: 'bg-emerald-500' },
+    CONFIRMADO: { texto: 'Confirmado', variante: 'info', ponto: 'bg-blue-500' },
+    FALTOU: { texto: 'Faltou', variante: 'danger', ponto: 'bg-red-500' },
+    ATENDIDO: { texto: 'Atendido', variante: 'purple', ponto: 'bg-purple-500' },
     CANCELADO: { texto: 'Cancelado', variante: 'neutral', ponto: 'bg-zinc-400' },
     ADMIN: { texto: 'Administrador', variante: 'purple' },
     DENTISTA: { texto: 'Dentista', variante: 'info' },

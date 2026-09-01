@@ -3,7 +3,13 @@ import { z } from 'zod';
 export const PapelEnum = z.enum(['RECEPCAO', 'DENTISTA', 'ADMIN']);
 export type Papel = z.infer<typeof PapelEnum>;
 
-export const StatusAgendamentoEnum = z.enum(['AGENDADO', 'CANCELADO']);
+export const StatusAgendamentoEnum = z.enum([
+  'AGENDADO',
+  'CONFIRMADO',
+  'FALTOU',
+  'ATENDIDO',
+  'CANCELADO',
+]);
 export type StatusAgendamento = z.infer<typeof StatusAgendamentoEnum>;
 
 export const SchemaErro = z.object({
@@ -143,6 +149,7 @@ export const SchemaCriarAgendamento = z.object({
   profissionalId: z.string().uuid(),
   procedimentoId: z.string().uuid(),
   inicio: z.string().min(1, 'Início é obrigatório'),
+  justificativaLiberacao: z.string().trim().min(5).max(500).optional(),
 });
 export type CriarAgendamentoRequest = z.infer<typeof SchemaCriarAgendamento>;
 
@@ -156,6 +163,16 @@ export const SchemaListarAgendamentosQuery = SchemaPaginacaoQuery.extend({
   ate: z.string().min(1),
   profissionalId: z.string().uuid().optional(),
 });
+
+export const SchemaAgendamentosDiaQuery = z.object({
+  data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inválida'),
+  profissionalId: z.string().uuid().optional(),
+});
+
+export const SchemaAtualizarStatusAgendamento = z.object({
+  status: StatusAgendamentoEnum,
+});
+export type AtualizarStatusAgendamentoRequest = z.infer<typeof SchemaAtualizarStatusAgendamento>;
 
 export const SchemaAgendamentoResponse = z.object({
   id: z.string().uuid(),

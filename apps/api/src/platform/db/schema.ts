@@ -14,7 +14,13 @@ import {
 } from 'drizzle-orm/pg-core';
 
 export const papelEnum = pgEnum('papel', ['RECEPCAO', 'DENTISTA', 'ADMIN']);
-export const statusAgendamentoEnum = pgEnum('status_agendamento', ['AGENDADO', 'CANCELADO']);
+export const statusAgendamentoEnum = pgEnum('status_agendamento', [
+  'AGENDADO',
+  'CONFIRMADO',
+  'FALTOU',
+  'ATENDIDO',
+  'CANCELADO',
+]);
 export const acaoAuditoriaEnum = pgEnum('acao_auditoria', ['CRIAR', 'EDITAR', 'DELETAR']);
 
 const timestamps = {

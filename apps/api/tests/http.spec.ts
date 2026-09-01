@@ -333,6 +333,140 @@ describe('API HTTP', () => {
     });
   });
 
+  it('lista a agenda diária por data e profissional', async () => {
+    const token = await login(app, 'recepcao@teste.local');
+    const data = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const ids = await obterIds();
+    const criacao = await app.inject({
+      method: 'POST',
+      url: '/api/v1/agendamentos',
+      cookies: { sessionId: token },
+      payload: {
+        pacienteId: ids.pacienteId,
+        profissionalId: ids.profissionalId,
+        procedimentoId: ids.procedimentoId,
+        inicio: `${data}T12:00:00.000-03:00`,
+      },
+    });
+    expect(criacao.statusCode).toBe(201);
+    const resposta = await app.inject({
+      method: 'GET',
+      url: `/api/v1/agendamentos/dia?data=${data}&profissionalId=${ids.profissionalId}`,
+      cookies: { sessionId: token },
+    });
+    expect(resposta.statusCode).toBe(200);
+    expect(resposta.json().dados.length).toBeGreaterThan(0);
+    expect(resposta.json().paginacao).toMatchObject({ pagina: 1, tamanho: 100 });
+  });
+
+  it('atualiza status com transições válidas, bloqueia transição final e audita', async () => {
+    const recepcao = await login(app, 'recepcao@teste.local');
+    const ids = await obterIds();
+    const criar = (inicio: string) =>
+      app.inject({
+        method: 'POST',
+        url: '/api/v1/agendamentos',
+        cookies: { sessionId: recepcao },
+        payload: {
+          pacienteId: ids.pacienteId,
+          profissionalId: ids.profissionalId,
+          procedimentoId: ids.procedimentoId,
+          inicio,
+        },
+      });
+
+    const primeiro = await criar(new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString());
+    const primeiroId = primeiro.json().id as string;
+    const confirmado = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/agendamentos/${primeiroId}/status`,
+      cookies: { sessionId: recepcao },
+      payload: { status: 'CONFIRMADO' },
+    });
+    expect(confirmado.statusCode).toBe(200);
+    expect(confirmado.json().status).toBe('CONFIRMADO');
+
+    const atendido = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/agendamentos/${primeiroId}/status`,
+      cookies: { sessionId: recepcao },
+      payload: { status: 'ATENDIDO' },
+    });
+    expect(atendido.statusCode).toBe(200);
+    const invalido = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/agendamentos/${primeiroId}/status`,
+      cookies: { sessionId: recepcao },
+      payload: { status: 'FALTOU' },
+    });
+    expect(invalido.statusCode).toBe(422);
+  });
+
+  it('permite status somente para recepção e admin', async () => {
+    const recepcao = await login(app, 'recepcao@teste.local');
+    const dentista = await login(app, 'dentista@teste.local');
+    const ids = await obterIds();
+    const criado = await app.inject({
+      method: 'POST',
+      url: '/api/v1/agendamentos',
+      cookies: { sessionId: recepcao },
+      payload: {
+        pacienteId: ids.pacienteId,
+        profissionalId: ids.profissionalId,
+        procedimentoId: ids.procedimentoId,
+        inicio: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      },
+    });
+    const resposta = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/agendamentos/${criado.json().id as string}/status`,
+      cookies: { sessionId: dentista },
+      payload: { status: 'CONFIRMADO' },
+    });
+    expect(resposta.statusCode).toBe(403);
+    expect(resposta.json().erro.codigo).toBe('SEM_PERMISSAO');
+  });
+
+  it('bloqueia paciente após duas faltas e libera somente com justificativa', async () => {
+    const recepcao = await login(app, 'recepcao@teste.local');
+    const ids = await obterIds();
+    const criar = (inicio: string, justificativaLiberacao?: string) =>
+      app.inject({
+        method: 'POST',
+        url: '/api/v1/agendamentos',
+        cookies: { sessionId: recepcao },
+        payload: {
+          pacienteId: ids.pacienteId,
+          profissionalId: ids.profissionalId,
+          procedimentoId: ids.procedimentoId,
+          inicio,
+          ...(justificativaLiberacao ? { justificativaLiberacao } : {}),
+        },
+      });
+    const marcarFalta = async (inicio: string) => {
+      const criado = await criar(inicio);
+      const alterado = await app.inject({
+        method: 'PATCH',
+        url: `/api/v1/agendamentos/${criado.json().id as string}/status`,
+        cookies: { sessionId: recepcao },
+        payload: { status: 'FALTOU' },
+      });
+      expect(alterado.statusCode).toBe(200);
+    };
+
+    await marcarFalta(new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString());
+    await marcarFalta(new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString());
+    const bloqueado = await criar(new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString());
+    expect(bloqueado.statusCode).toBe(422);
+    expect(bloqueado.json().erro.codigo).toBe('PACIENTE_BLOQUEADO');
+
+    const liberado = await criar(
+      new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString(),
+      'Paciente confirmou compromisso'
+    );
+    expect(liberado.statusCode).toBe(201);
+  });
+
   it('fluxo completo de agendamento: criar, listar por período, reagendar e cancelar', async () => {
     const token = await login(app, 'recepcao@teste.local');
     const ids = await obterIds();
