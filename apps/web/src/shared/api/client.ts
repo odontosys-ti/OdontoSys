@@ -24,7 +24,7 @@ export async function api<S extends z.ZodType>(
     ...init,
     credentials: 'include',
     headers: {
-      'Content-Type': 'application/json',
+      ...(init.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
       ...(mutacao ? { 'X-OdontoSys-CSRF': '1' } : {}),
       ...(init.headers ?? {}),
     },

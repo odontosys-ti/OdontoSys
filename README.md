@@ -14,6 +14,7 @@ Você pode iniciar o ambiente local ou a versão compilada para túnel com um co
 | ------------------------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | **`bun run dev`**        | 🚀 **Desenvolvimento**    | Cria `.env` se necessário, sobe os bancos dev/test, aplica migrações, garante o seed demo e inicia API/Web em modo watch.                   |
 | **`bun run production`** | 🌐 **Produção local**     | Sobe apenas o banco dev, aplica migrações, gera o build e serve API/Web compilados em `:3333`/`:4173`, com proxy `/api` para uso via túnel. |
+| **`bun run prod`**       | ↪️ **Atalho**             | Alcunha de `bun run production`.                                                                                                            |
 | **`pnpm down`**          | 🛑 **Parar bancos**       | Para e remove os containers Docker. Processos API/Web são encerrados com `Ctrl+C` no terminal em que foram iniciados.                       |
 | **`pnpm status`**        | 📊 **Verificar Saúde**    | Exibe o status em tempo real de cada serviço (Postgres Dev/Test, API e Web).                                                                |
 | **`pnpm check`**         | 🧪 **Validar Qualidade**  | Executa Linter, Prettier, TypeScript Strict, testes automatizados e Build.                                                                  |

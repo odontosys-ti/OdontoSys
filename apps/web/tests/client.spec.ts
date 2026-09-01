@@ -51,6 +51,26 @@ describe('cliente HTTP', () => {
     );
   });
 
+  it('não envia content-type JSON em mutação sem corpo', async () => {
+    const requisicao = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    vi.stubGlobal('fetch', requisicao);
+
+    await expect(
+      api('/auth/logout', z.object({ ok: z.boolean() }), { method: 'POST' })
+    ).resolves.toEqual({
+      ok: true,
+    });
+
+    expect(requisicao).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        headers: expect.not.objectContaining({ 'Content-Type': 'application/json' }),
+      })
+    );
+  });
+
   it('aceita resposta sem conteúdo quando o contrato permite', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 204 })));
 

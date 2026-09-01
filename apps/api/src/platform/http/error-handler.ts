@@ -11,12 +11,18 @@ type ErroValidacaoFastify = Error & {
   }>;
 };
 
+type ErroRequisicaoFastify = Error & { statusCode?: number };
+
 function ehErroValidacaoFastify(erro: unknown): erro is ErroValidacaoFastify {
   return (
     erro instanceof Error &&
     'validation' in erro &&
     Array.isArray((erro as { validation?: unknown }).validation)
   );
+}
+
+function ehErroRequisicaoFastify(erro: unknown): erro is ErroRequisicaoFastify {
+  return erro instanceof Error && (erro as ErroRequisicaoFastify).statusCode === 400;
 }
 
 export function registrarHandlerErro(app: FastifyInstance): void {
@@ -49,6 +55,18 @@ export function registrarHandlerErro(app: FastifyInstance): void {
               item.params?.missingProperty ?? item.instancePath?.replace(/^\//, '') ?? 'requisicao',
             mensagem: item.message ?? 'Valor inválido',
           })),
+        },
+        requestId,
+      });
+    }
+
+    if (ehErroRequisicaoFastify(erro)) {
+      request.log.info({ requestId }, 'requisição inválida');
+      return reply.status(400).send({
+        erro: {
+          codigo: 'VALIDACAO_INVALIDA',
+          mensagem: CatalogoErros.VALIDACAO_INVALIDA.mensagem,
+          detalhes: [],
         },
         requestId,
       });

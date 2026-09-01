@@ -69,6 +69,19 @@ describe('API HTTP', () => {
     expect(cookie?.value).toBe('');
   });
 
+  it('corpo JSON vazio devolve erro de requisição, não erro interno', async () => {
+    const token = await login(app, 'recepcao@teste.local');
+    const resposta = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/logout',
+      cookies: { sessionId: token },
+      headers: { 'content-type': 'application/json' },
+    });
+
+    expect(resposta.statusCode).toBe(400);
+    expect(resposta.json().erro.codigo).toBe('VALIDACAO_INVALIDA');
+  });
+
   it('bloqueia mutação originada fora da aplicação', async () => {
     const token = await login(app, 'recepcao@teste.local');
     const resposta = await app.inject({
