@@ -32,13 +32,45 @@ const SchemaEnv = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   API_PORT: z.coerce.number().int().positive().default(3333),
   DATABASE_URL: z.string().min(1, 'DATABASE_URL é obrigatória'),
+  DATABASE_TEST_URL: z.url().optional(),
   JWT_SECRET: z.string().min(32, 'JWT_SECRET deve ter pelo menos 32 caracteres'),
-  JWT_EXPIRES_IN: z.string().min(1).default('8h'),
-  WEB_ORIGIN: z.string().min(1).default('http://localhost:5173'),
+  JWT_EXPIRES_IN: z
+    .string()
+    .regex(/^\d+[smhd]$/, 'use uma duração como 30m, 8h ou 7d')
+    .default('8h'),
+  WEB_ORIGIN: z
+    .string()
+    .refine(
+      (valor) => {
+        try {
+          return ['http:', 'https:'].includes(new URL(valor).protocol);
+        } catch {
+          return false;
+        }
+      },
+      { message: 'deve ser uma origem HTTP ou HTTPS válida' }
+    )
+    .default('http://localhost:5173'),
+  TRUST_PROXY: z
+    .enum(['true', 'false'])
+    .transform((valor) => valor === 'true')
+    .default(false),
   LOG_LEVEL: z.string().min(1).default('info'),
 });
 
 export type Env = z.infer<typeof SchemaEnv>;
+
+const multiplicadores = { s: 1, m: 60, h: 3_600, d: 86_400 } as const;
+
+export function duracaoEmSegundos(valor: string): number {
+  const correspondencia = /^(\d+)([smhd])$/.exec(valor);
+  if (!correspondencia) {
+    throw new Error('Duração inválida');
+  }
+  const quantidade = Number(correspondencia[1]);
+  const unidade = correspondencia[2] as keyof typeof multiplicadores;
+  return quantidade * multiplicadores[unidade];
+}
 
 let cache: Env | undefined;
 

@@ -69,6 +69,19 @@ describe('API HTTP', () => {
     expect(cookie?.value).toBe('');
   });
 
+  it('bloqueia mutação originada fora da aplicação', async () => {
+    const token = await login(app, 'recepcao@teste.local');
+    const resposta = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/logout',
+      cookies: { sessionId: token },
+      headers: { origin: 'https://site-malicioso.example' },
+    });
+
+    expect(resposta.statusCode).toBe(403);
+    expect(resposta.json().erro.codigo).toBe('SEM_PERMISSAO');
+  });
+
   it('corpo inválido devolve 400 VALIDACAO_INVALIDA com detalhes', async () => {
     const resposta = await app.inject({
       method: 'POST',

@@ -13,11 +13,14 @@ export class ApiError extends Error {
 }
 
 export async function api<T>(caminho: string, init: RequestInit = {}): Promise<T> {
+  const metodo = (init.method ?? 'GET').toUpperCase();
+  const mutacao = !['GET', 'HEAD', 'OPTIONS'].includes(metodo);
   const resposta = await fetch(`${baseUrl}${caminho}`, {
     ...init,
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
+      ...(mutacao ? { 'X-OdontoSys-CSRF': '1' } : {}),
       ...(init.headers ?? {}),
     },
   });

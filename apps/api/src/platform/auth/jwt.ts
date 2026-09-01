@@ -28,16 +28,20 @@ declare module '@fastify/jwt' {
 declare module 'fastify' {
   interface FastifyInstance {
     authenticate: (request: FastifyRequest) => Promise<void>;
+    csrfProtection: (request: FastifyRequest) => Promise<void>;
   }
 }
 
 export async function registrarPlugins(app: FastifyInstance): Promise<void> {
   const configuracao = env();
+  const origemWeb = new URL(configuracao.WEB_ORIGIN).origin;
 
   await app.register(helmet, { global: true });
   await app.register(cors, {
-    origin: configuracao.WEB_ORIGIN,
+    origin: origemWeb,
     credentials: true,
+    methods: ['GET', 'HEAD', 'POST', 'PATCH', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'X-OdontoSys-CSRF'],
   });
   await app.register(cookie);
   await app.register(jwt, {
@@ -78,6 +82,20 @@ export async function registrarPlugins(app: FastifyInstance): Promise<void> {
       await request.jwtVerify();
     } catch {
       throw new AppError('NAO_AUTENTICADO');
+    }
+    await app.csrfProtection(request);
+  });
+
+  app.decorate('csrfProtection', async (request: FastifyRequest) => {
+    if (['GET', 'HEAD', 'OPTIONS'].includes(request.method)) {
+      return;
+    }
+    const origem = request.headers.origin;
+    if (origem === undefined) {
+      return;
+    }
+    if (origem !== origemWeb || request.headers['x-odontosys-csrf'] !== '1') {
+      throw new AppError('SEM_PERMISSAO');
     }
   });
 }

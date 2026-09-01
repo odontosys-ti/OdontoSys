@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { SchemaLogin, SchemaLoginResponse, SchemaMeResponse, SchemaOk } from '@odontosys/contracts';
 
-import { env } from '../../../platform/config';
+import { duracaoEmSegundos, env } from '../../../platform/config';
 import { schemaRota } from '../../../platform/http/schema';
 import { CasoDeUsoAutenticar, CasoDeUsoObterUsuarioAutenticado } from '../application/autenticar';
 import { HashServiceArgon2, UsuarioRepository } from '../infra/usuario.repository';
@@ -15,6 +15,7 @@ export async function registrarRotasAuth(app: FastifyInstance): Promise<void> {
   app.post(
     '/auth/login',
     {
+      onRequest: [app.csrfProtection],
       config: {
         rateLimit: {
           max: env().NODE_ENV === 'test' ? 1000 : 10,
@@ -41,7 +42,7 @@ export async function registrarRotasAuth(app: FastifyInstance): Promise<void> {
         secure: env().NODE_ENV === 'production',
         sameSite: 'lax',
         path: '/',
-        maxAge: 8 * 60 * 60,
+        maxAge: duracaoEmSegundos(env().JWT_EXPIRES_IN),
       });
 
       return {
@@ -79,7 +80,12 @@ export async function registrarRotasAuth(app: FastifyInstance): Promise<void> {
       schema: schemaRota({ resposta: SchemaOk, autenticada: true, erros: [401, 500] }),
     },
     async (_request, reply) => {
-      reply.clearCookie('sessionId', { path: '/' });
+      reply.clearCookie('sessionId', {
+        httpOnly: true,
+        secure: env().NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+      });
       return { ok: true };
     }
   );

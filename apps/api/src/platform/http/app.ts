@@ -17,7 +17,8 @@ import { schemaRota } from './schema';
 export async function criarApp(): Promise<FastifyInstance> {
   const app = Fastify({
     logger: criarOpcoesLogger(),
-    trustProxy: true,
+    trustProxy: env().TRUST_PROXY,
+    bodyLimit: 64 * 1024,
     genReqId: () => criarUuidV7(),
     requestIdHeader: 'x-request-id',
   });
