@@ -253,10 +253,25 @@ describe('API HTTP', () => {
     const token = await login(app, 'recepcao@teste.local');
     const resposta = await app.inject({
       method: 'GET',
-      url: '/api/v1/pacientes/00000000-0000-0000-0000-000000000099',
+      url: '/api/v1/pacientes/01900000-0000-7000-8000-000000000099',
       cookies: { sessionId: token },
     });
     expect(resposta.statusCode).toBe(404);
+  });
+
+  it('parâmetro UUID inválido devolve 400 no envelope padrão', async () => {
+    const token = await login(app, 'recepcao@teste.local');
+    const resposta = await app.inject({
+      method: 'GET',
+      url: '/api/v1/pacientes/id-invalido',
+      cookies: { sessionId: token },
+    });
+
+    expect(resposta.statusCode).toBe(400);
+    expect(resposta.json()).toMatchObject({
+      erro: { codigo: 'VALIDACAO_INVALIDA' },
+      requestId: expect.any(String),
+    });
   });
 
   it('fluxo completo de agendamento: criar, listar por período, reagendar e cancelar', async () => {

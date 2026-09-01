@@ -10,11 +10,26 @@ export const SchemaErro = z.object({
   erro: z.object({
     codigo: z.string(),
     mensagem: z.string(),
-    detalhes: z.array(z.unknown()),
+    detalhes: z.array(
+      z.object({
+        campo: z.string().optional(),
+        mensagem: z.string(),
+      })
+    ),
   }),
   requestId: z.string(),
 });
 export type EnvelopeErro = z.infer<typeof SchemaErro>;
+
+export const SchemaIdParams = z.object({ id: z.string().uuid('Identificador inválido') });
+export type IdParams = z.infer<typeof SchemaIdParams>;
+
+export const SchemaOk = z.object({ ok: z.boolean() });
+export const SchemaHealth = z.object({
+  status: z.enum(['ok', 'degradado']),
+  banco: z.enum(['ok', 'indisponivel']),
+  timestamp: z.string(),
+});
 
 export const SchemaPaginacaoQuery = z.object({
   pagina: z.coerce.number().int().positive().default(1),
@@ -155,3 +170,9 @@ export const SchemaAgendamentoResponse = z.object({
 });
 export type AgendamentoResponse = z.infer<typeof SchemaAgendamentoResponse>;
 export const SchemaListaAgendamentos = schemaLista(SchemaAgendamentoResponse);
+
+export function paraJsonSchema(schema: z.ZodType): Record<string, unknown> {
+  const convertido = z.toJSONSchema(schema, { target: 'draft-7' });
+  const { $schema: _draft, ...jsonSchema } = convertido;
+  return jsonSchema;
+}

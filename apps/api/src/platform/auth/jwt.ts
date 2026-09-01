@@ -58,6 +58,15 @@ export async function registrarPlugins(app: FastifyInstance): Promise<void> {
         version: '0.1.0',
         description: 'API base da Sprint 0 — cadastros e agendamento simples.',
       },
+      components: {
+        securitySchemes: {
+          cookieAuth: {
+            type: 'apiKey',
+            in: 'cookie',
+            name: 'sessionId',
+          },
+        },
+      },
     },
   });
   await app.register(swaggerUi, {

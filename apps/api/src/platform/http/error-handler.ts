@@ -3,6 +3,22 @@ import { ZodError } from 'zod';
 
 import { AppError, CatalogoErros } from '../erros';
 
+type ErroValidacaoFastify = Error & {
+  validation: Array<{
+    instancePath?: string;
+    message?: string;
+    params?: { missingProperty?: string };
+  }>;
+};
+
+function ehErroValidacaoFastify(erro: unknown): erro is ErroValidacaoFastify {
+  return (
+    erro instanceof Error &&
+    'validation' in erro &&
+    Array.isArray((erro as { validation?: unknown }).validation)
+  );
+}
+
 export function registrarHandlerErro(app: FastifyInstance): void {
   app.setErrorHandler((erro: unknown, request: FastifyRequest, reply: FastifyReply) => {
     const requestId = request.id;
@@ -16,6 +32,22 @@ export function registrarHandlerErro(app: FastifyInstance): void {
           detalhes: erro.issues.map((issue) => ({
             campo: issue.path.join('.'),
             mensagem: issue.message,
+          })),
+        },
+        requestId,
+      });
+    }
+
+    if (ehErroValidacaoFastify(erro)) {
+      request.log.info({ requestId }, 'validação inválida');
+      return reply.status(400).send({
+        erro: {
+          codigo: 'VALIDACAO_INVALIDA',
+          mensagem: CatalogoErros.VALIDACAO_INVALIDA.mensagem,
+          detalhes: erro.validation.map((item) => ({
+            campo:
+              item.params?.missingProperty ?? item.instancePath?.replace(/^\//, '') ?? 'requisicao',
+            mensagem: item.message ?? 'Valor inválido',
           })),
         },
         requestId,

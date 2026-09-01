@@ -1,4 +1,5 @@
 import Fastify, { type FastifyInstance } from 'fastify';
+import { SchemaHealth } from '@odontosys/contracts';
 
 import { registrarRotasAgendamentos } from '../../modules/agendamentos/http/routes';
 import { registrarRotasAuth } from '../../modules/auth/http/routes';
@@ -11,6 +12,7 @@ import { pingBanco } from '../db';
 import { criarOpcoesLogger } from '../logger';
 import { criarUuidV7 } from '../uuid';
 import { registrarHandlerErro } from './error-handler';
+import { schemaRota } from './schema';
 
 export async function criarApp(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -23,15 +25,19 @@ export async function criarApp(): Promise<FastifyInstance> {
   await registrarPlugins(app);
   registrarHandlerErro(app);
 
-  app.get('/health', async (_request, reply) => {
-    const bancoOk = await pingBanco();
-    const status = bancoOk ? 'ok' : 'degradado';
-    return reply.status(bancoOk ? 200 : 503).send({
-      status,
-      banco: bancoOk ? 'ok' : 'indisponivel',
-      timestamp: new Date().toISOString(),
-    });
-  });
+  app.get(
+    '/health',
+    { schema: schemaRota({ resposta: SchemaHealth, erros: [500, 503] }) },
+    async (_request, reply) => {
+      const bancoOk = await pingBanco();
+      const status = bancoOk ? 'ok' : 'degradado';
+      return reply.status(bancoOk ? 200 : 503).send({
+        status,
+        banco: bancoOk ? 'ok' : 'indisponivel',
+        timestamp: new Date().toISOString(),
+      });
+    }
+  );
 
   await app.register(
     async (api) => {

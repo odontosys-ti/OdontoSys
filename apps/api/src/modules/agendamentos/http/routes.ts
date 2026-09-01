@@ -1,37 +1,61 @@
 import {
   SchemaAtualizarAgendamento,
+  SchemaAgendamentoResponse,
   SchemaCriarAgendamento,
+  SchemaIdParams,
+  SchemaListaAgendamentos,
   SchemaListarAgendamentosQuery,
+  type IdParams,
 } from '@odontosys/contracts';
 import type { FastifyInstance } from 'fastify';
 
 import { contexto, exigirPapel } from '../../../platform/auth/jwt';
 import { parseData } from '../../../platform/http/datas';
+import { schemaRota } from '../../../platform/http/schema';
 import { ServicoAgendamentos, serializarAgendamento } from '../application/servico';
 
 export async function registrarRotasAgendamentos(app: FastifyInstance): Promise<void> {
   const servico = new ServicoAgendamentos();
 
-  app.get('/agendamentos', { onRequest: [app.authenticate] }, async (request) => {
-    const query = SchemaListarAgendamentosQuery.parse(request.query);
-    const sessao = contexto(request);
-    const lista = await servico.listar(
-      sessao.clinicaId,
-      query.pagina,
-      query.tamanho,
-      parseData(query.de, 'de'),
-      parseData(query.ate, 'ate'),
-      query.profissionalId
-    );
-    return {
-      dados: lista.itens.map(serializarAgendamento),
-      paginacao: { pagina: query.pagina, tamanho: query.tamanho, total: lista.total },
-    };
-  });
+  app.get(
+    '/agendamentos',
+    {
+      onRequest: [app.authenticate],
+      schema: schemaRota({
+        querystring: SchemaListarAgendamentosQuery,
+        resposta: SchemaListaAgendamentos,
+        autenticada: true,
+      }),
+    },
+    async (request) => {
+      const query = SchemaListarAgendamentosQuery.parse(request.query);
+      const sessao = contexto(request);
+      const lista = await servico.listar(
+        sessao.clinicaId,
+        query.pagina,
+        query.tamanho,
+        parseData(query.de, 'de'),
+        parseData(query.ate, 'ate'),
+        query.profissionalId
+      );
+      return {
+        dados: lista.itens.map(serializarAgendamento),
+        paginacao: { pagina: query.pagina, tamanho: query.tamanho, total: lista.total },
+      };
+    }
+  );
 
   app.post(
     '/agendamentos',
-    { onRequest: [app.authenticate, exigirPapel('RECEPCAO', 'ADMIN')] },
+    {
+      onRequest: [app.authenticate, exigirPapel('RECEPCAO', 'ADMIN')],
+      schema: schemaRota({
+        body: SchemaCriarAgendamento,
+        resposta: SchemaAgendamentoResponse,
+        status: 201,
+        autenticada: true,
+      }),
+    },
     async (request, reply) => {
       const body = SchemaCriarAgendamento.parse(request.body);
       const sessao = contexto(request);
@@ -45,11 +69,19 @@ export async function registrarRotasAgendamentos(app: FastifyInstance): Promise<
     }
   );
 
-  app.patch(
+  app.patch<{ Params: IdParams }>(
     '/agendamentos/:id',
-    { onRequest: [app.authenticate, exigirPapel('RECEPCAO', 'ADMIN')] },
+    {
+      onRequest: [app.authenticate, exigirPapel('RECEPCAO', 'ADMIN')],
+      schema: schemaRota({
+        params: SchemaIdParams,
+        body: SchemaAtualizarAgendamento,
+        resposta: SchemaAgendamentoResponse,
+        autenticada: true,
+      }),
+    },
     async (request) => {
-      const params = request.params as { id: string };
+      const params = SchemaIdParams.parse(request.params);
       const body = SchemaAtualizarAgendamento.parse(request.body);
       const sessao = contexto(request);
       const atualizado = await servico.reagendar(
@@ -62,11 +94,18 @@ export async function registrarRotasAgendamentos(app: FastifyInstance): Promise<
     }
   );
 
-  app.delete(
+  app.delete<{ Params: IdParams }>(
     '/agendamentos/:id',
-    { onRequest: [app.authenticate, exigirPapel('RECEPCAO', 'ADMIN')] },
+    {
+      onRequest: [app.authenticate, exigirPapel('RECEPCAO', 'ADMIN')],
+      schema: schemaRota({
+        params: SchemaIdParams,
+        resposta: SchemaAgendamentoResponse,
+        autenticada: true,
+      }),
+    },
     async (request) => {
-      const params = request.params as { id: string };
+      const params = SchemaIdParams.parse(request.params);
       const sessao = contexto(request);
       return serializarAgendamento(
         await servico.cancelar(sessao.clinicaId, sessao.usuarioId, params.id)

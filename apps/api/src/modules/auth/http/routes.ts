@@ -1,7 +1,8 @@
 import type { FastifyInstance } from 'fastify';
-import { SchemaLogin } from '@odontosys/contracts';
+import { SchemaLogin, SchemaLoginResponse, SchemaMeResponse, SchemaOk } from '@odontosys/contracts';
 
 import { env } from '../../../platform/config';
+import { schemaRota } from '../../../platform/http/schema';
 import { CasoDeUsoAutenticar, CasoDeUsoObterUsuarioAutenticado } from '../application/autenticar';
 import { HashServiceArgon2, UsuarioRepository } from '../infra/usuario.repository';
 
@@ -20,6 +21,11 @@ export async function registrarRotasAuth(app: FastifyInstance): Promise<void> {
           timeWindow: '1 minute',
         },
       },
+      schema: schemaRota({
+        body: SchemaLogin,
+        resposta: SchemaLoginResponse,
+        erros: [400, 401, 500],
+      }),
     },
     async (request, reply) => {
       const body = SchemaLogin.parse(request.body);
@@ -48,19 +54,33 @@ export async function registrarRotasAuth(app: FastifyInstance): Promise<void> {
     }
   );
 
-  app.get('/auth/me', { onRequest: [app.authenticate] }, async (request) => {
-    const usuario = await obterUsuario.executar(request.user.usuarioId);
-    return {
-      usuarioId: usuario.id,
-      nome: usuario.nome,
-      email: usuario.email,
-      papel: usuario.papel,
-      clinicaId: usuario.clinicaId,
-    };
-  });
+  app.get(
+    '/auth/me',
+    {
+      onRequest: [app.authenticate],
+      schema: schemaRota({ resposta: SchemaMeResponse, autenticada: true, erros: [401, 404, 500] }),
+    },
+    async (request) => {
+      const usuario = await obterUsuario.executar(request.user.usuarioId);
+      return {
+        usuarioId: usuario.id,
+        nome: usuario.nome,
+        email: usuario.email,
+        papel: usuario.papel,
+        clinicaId: usuario.clinicaId,
+      };
+    }
+  );
 
-  app.post('/auth/logout', { onRequest: [app.authenticate] }, async (_request, reply) => {
-    reply.clearCookie('sessionId', { path: '/' });
-    return { ok: true };
-  });
+  app.post(
+    '/auth/logout',
+    {
+      onRequest: [app.authenticate],
+      schema: schemaRota({ resposta: SchemaOk, autenticada: true, erros: [401, 500] }),
+    },
+    async (_request, reply) => {
+      reply.clearCookie('sessionId', { path: '/' });
+      return { ok: true };
+    }
+  );
 }
