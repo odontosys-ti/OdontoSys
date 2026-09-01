@@ -44,6 +44,36 @@ function executarComando(comando: string, args: string[]): Promise<number> {
   });
 }
 
+async function iniciarServico(
+  nome: string,
+  comando: string,
+  args: string[],
+  porta: number,
+  processos: ChildProcess[]
+): Promise<void> {
+  if (await testarPorta(porta)) {
+    logSucesso(`${nome} já está ativo na porta ${porta}; processo duplicado evitado.`);
+    return;
+  }
+  const processo = spawn(comando, args, {
+    cwd: ROOT_DIR,
+    stdio: 'inherit',
+    shell: false,
+  });
+  processos.push(processo);
+  processo.once('error', () => logErro(`Falha ao iniciar ${nome}.`));
+  processo.once('exit', (codigo) => {
+    if (codigo !== null && codigo !== 0) {
+      logErro(`${nome} encerrou com código ${codigo}.`);
+    }
+  });
+  if (!(await aguardarBanco(porta, 20))) {
+    processo.kill('SIGTERM');
+    throw new Error(`${nome} não respondeu na porta ${porta}.`);
+  }
+  logSucesso(`${nome} pronto na porta ${porta}.`);
+}
+
 async function testarPorta(porta: number, timeoutMs = 800): Promise<boolean> {
   const hosts = ['localhost', '127.0.0.1', '::1'];
   for (const host of hosts) {
@@ -152,32 +182,41 @@ ${c.dim}Pressione Ctrl+C a qualquer momento para encerrar todos os processos.${c
   // Passo 6: Iniciar processos da API e Web em paralelo com graceful shutdown
   const processos: ChildProcess[] = [];
 
-  const apiProc = spawn('pnpm', ['--filter=@odontosys/api', 'run', 'dev'], {
-    cwd: ROOT_DIR,
-    stdio: 'inherit',
-    shell: false,
-  });
-  processos.push(apiProc);
-
-  const webProc = spawn('pnpm', ['--filter=@odontosys/web', 'run', 'dev'], {
-    cwd: ROOT_DIR,
-    stdio: 'inherit',
-    shell: false,
-  });
-  processos.push(webProc);
-
+  const pararProcessos = () => {
+    for (const proc of processos) {
+      if (!proc.killed) proc.kill('SIGTERM');
+    }
+  };
   const encerrar = () => {
     log('Encerrando processos da API e Web...');
-    for (const proc of processos) {
-      if (!proc.killed) {
-        proc.kill('SIGTERM');
-      }
-    }
+    pararProcessos();
     process.exit(0);
   };
 
   process.on('SIGINT', encerrar);
   process.on('SIGTERM', encerrar);
+
+  try {
+    await Promise.all([
+      iniciarServico(
+        'API Backend',
+        'pnpm',
+        ['--filter=@odontosys/api', 'run', 'dev'],
+        3333,
+        processos
+      ),
+      iniciarServico(
+        'Web Frontend',
+        'pnpm',
+        ['--filter=@odontosys/web', 'run', 'dev', '--', '--strictPort'],
+        5173,
+        processos
+      ),
+    ]);
+  } catch (erro) {
+    pararProcessos();
+    throw erro;
+  }
 }
 
 // 2. Comando: STOP
@@ -194,7 +233,7 @@ ${c.yellow}${c.bold}======================================================
 
   console.log(`
 ${c.green}${c.bold}✔ Sistema OdontoSys pausado com sucesso!${c.reset}
-${c.dim}Para iniciar novamente, execute: pnpm start:all${c.reset}
+    ${c.dim}Para iniciar novamente, execute: bun run up (ou pnpm run up)${c.reset}
 `);
 }
 

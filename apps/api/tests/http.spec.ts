@@ -82,6 +82,21 @@ describe('API HTTP', () => {
     expect(resposta.json().erro.codigo).toBe('SEM_PERMISSAO');
   });
 
+  it('aceita o host loopback alternativo no CORS local', async () => {
+    const resposta = await app.inject({
+      method: 'OPTIONS',
+      url: '/api/v1/auth/login',
+      headers: {
+        origin: 'http://127.0.0.1:5173',
+        'access-control-request-method': 'POST',
+        'access-control-request-headers': 'content-type,x-odontosys-csrf',
+      },
+    });
+
+    expect(resposta.statusCode).toBe(204);
+    expect(resposta.headers['access-control-allow-origin']).toBe('http://127.0.0.1:5173');
+  });
+
   it('corpo inválido devolve 400 VALIDACAO_INVALIDA com detalhes', async () => {
     const resposta = await app.inject({
       method: 'POST',

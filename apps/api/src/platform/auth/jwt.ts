@@ -35,10 +35,18 @@ declare module 'fastify' {
 export async function registrarPlugins(app: FastifyInstance): Promise<void> {
   const configuracao = env();
   const origemWeb = new URL(configuracao.WEB_ORIGIN).origin;
+  const origensWeb = new Set([origemWeb]);
+  if (configuracao.NODE_ENV !== 'production') {
+    const urlAlternativa = new URL(origemWeb);
+    if (urlAlternativa.hostname === 'localhost') {
+      urlAlternativa.hostname = '127.0.0.1';
+      origensWeb.add(urlAlternativa.origin);
+    }
+  }
 
   await app.register(helmet, { global: true });
   await app.register(cors, {
-    origin: origemWeb,
+    origin: [...origensWeb],
     credentials: true,
     methods: ['GET', 'HEAD', 'POST', 'PATCH', 'DELETE'],
     allowedHeaders: ['Content-Type', 'X-OdontoSys-CSRF'],
@@ -94,7 +102,7 @@ export async function registrarPlugins(app: FastifyInstance): Promise<void> {
     if (origem === undefined) {
       return;
     }
-    if (origem !== origemWeb || request.headers['x-odontosys-csrf'] !== '1') {
+    if (!origem || !origensWeb.has(origem) || request.headers['x-odontosys-csrf'] !== '1') {
       throw new AppError('SEM_PERMISSAO');
     }
   });

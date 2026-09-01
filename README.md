@@ -10,13 +10,13 @@ Sprint 0: fundação (autenticação, cadastros, agendamento simples, auditoria,
 
 Você pode subir ou parar **todo o ecossistema** com **um único comando inteligente**:
 
-| Comando                             | Ação                      | O que ele faz automaticamente                                                                                                                                                                                                                                                                                 |
-| ----------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`pnpm run up`** _(ou `pnpm dev`)_ | 🚀 **Rodar Tudo**         | 1. Cria `.env` se não existir.<br>2. Sobe containers Docker (`postgres-dev` e `postgres-test`).<br>3. Aguarda portas 5432/5433 responderem.<br>4. Executa migrações e seed idempotente.<br>5. Inicia API Fastify e Web React em paralelo.<br>6. Trata Ctrl+C com encerramento gracioso de todos os processos. |
-| **`pnpm down`**                     | 🛑 **Parar Tudo**         | Para e desliga containers Docker e libera todos os processos.                                                                                                                                                                                                                                                 |
-| **`pnpm status`**                   | 📊 **Verificar Saúde**    | Exibe o status em tempo real de cada serviço (Postgres Dev/Test, API e Web).                                                                                                                                                                                                                                  |
-| **`pnpm check`**                    | 🧪 **Validar Qualidade**  | Executa Linter, Prettier, TypeScript Strict, 65 testes automatizados e Build.                                                                                                                                                                                                                                 |
-| **`pnpm check:fix`**                | ✨ **Formatar e Validar** | Auto-formata com Prettier e executa o `pnpm check`.                                                                                                                                                                                                                                                           |
+| Comando                               | Ação                      | O que ele faz automaticamente                                                                                                                                                                                                                                                                                                   |
+| ------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`bun run up`** _(ou `pnpm run up`)_ | 🚀 **Rodar Tudo**         | 1. Cria `.env` se não existir.<br>2. Sobe containers Docker (`postgres-dev` e `postgres-test`).<br>3. Aguarda portas 5432/5433 responderem.<br>4. Executa migrações e seed idempotente.<br>5. Inicia API Fastify e Web React sem duplicar processos ativos.<br>6. Trata Ctrl+C com encerramento gracioso de todos os processos. |
+| **`pnpm down`**                       | 🛑 **Parar Tudo**         | Para e desliga containers Docker e libera todos os processos.                                                                                                                                                                                                                                                                   |
+| **`pnpm status`**                     | 📊 **Verificar Saúde**    | Exibe o status em tempo real de cada serviço (Postgres Dev/Test, API e Web).                                                                                                                                                                                                                                                    |
+| **`pnpm check`**                      | 🧪 **Validar Qualidade**  | Executa Linter, Prettier, TypeScript Strict, 65 testes automatizados e Build.                                                                                                                                                                                                                                                   |
+| **`pnpm check:fix`**                  | ✨ **Formatar e Validar** | Auto-formata com Prettier e executa o `pnpm check`.                                                                                                                                                                                                                                                                             |
 
 ---
 
@@ -25,12 +25,12 @@ Você pode subir ou parar **todo o ecossistema** com **um único comando intelig
 ### 1. Para Rodar Tudo com 1 Comando:
 
 ```bash
-pnpm run up
+bun run up
 ```
 
-_(ou `pnpm dev`)_
+_(ou `pnpm run up` / `pnpm dev`)_
 
-> **Nota sobre o pnpm:** Como a palavra `up` isolada é um atalho interno do pnpm para `pnpm update` (atualização de pacotes), utilize **`pnpm run up`** ou **`pnpm dev`** para rodar o comando mestre.
+> **Nota:** `bun run up` e `pnpm run up` executam o mesmo comando mestre. No pnpm, não use `pnpm up` sem `run`, pois `up` é atalho para atualização de pacotes.
 
 ### 2. Para Parar Tudo com 1 Comando:
 
