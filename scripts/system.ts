@@ -67,7 +67,7 @@ async function iniciarServico(
       logErro(`${nome} encerrou com código ${codigo}.`);
     }
   });
-  if (!(await aguardarBanco(porta, 20))) {
+  if (!(await aguardarPorta(porta, 20))) {
     processo.kill('SIGTERM');
     throw new Error(`${nome} não respondeu na porta ${porta}.`);
   }
@@ -98,7 +98,7 @@ async function testarPorta(porta: number, timeoutMs = 800): Promise<boolean> {
   return false;
 }
 
-async function aguardarBanco(porta: number, maxTentativas = 30): Promise<boolean> {
+async function aguardarPorta(porta: number, maxTentativas = 30): Promise<boolean> {
   for (let i = 0; i < maxTentativas; i++) {
     const pronto = await testarPorta(porta);
     if (pronto) return true;
@@ -134,8 +134,8 @@ ${c.blue}${c.bold}======================================================
 
   // Passo 3: Aguardar banco de dados
   log('Aguardando banco de dados responder na porta 5432...');
-  const bancoDevPronto = await aguardarBanco(5432);
-  const bancoTestPronto = await aguardarBanco(5433);
+  const bancoDevPronto = await aguardarPorta(5432);
+  const bancoTestPronto = await aguardarPorta(5433);
 
   if (!bancoDevPronto || !bancoTestPronto) {
     logErro('Timeout aguardando inicialização do PostgreSQL.');
