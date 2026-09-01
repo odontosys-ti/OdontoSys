@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { useState } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
@@ -14,6 +15,7 @@ import {
   CardTitle,
   EmptyState,
   ErrorState,
+  Input,
   Modal,
   PageHeader,
   Spinner,
@@ -111,6 +113,32 @@ describe('componentes da web', () => {
       </Modal>
     );
     expect(screen.queryByText('Conteúdo do modal')).not.toBeInTheDocument();
+  });
+
+  it('Modal anuncia diálogo, fecha com Escape e restaura o foco', () => {
+    function ExemploModal() {
+      const [aberto, setAberto] = useState(false);
+      return (
+        <div>
+          <button type="button" onClick={() => setAberto(true)}>
+            Abrir
+          </button>
+          <Modal titulo="Cadastro" aberto={aberto} onClose={() => setAberto(false)}>
+            <Input aria-label="Nome" data-autofocus />
+          </Modal>
+        </div>
+      );
+    }
+    render(<ExemploModal />);
+    const abrir = screen.getByRole('button', { name: 'Abrir' });
+    abrir.focus();
+    fireEvent.click(abrir);
+    const dialogo = screen.getByRole('dialog', { name: 'Cadastro' });
+    expect(dialogo).toHaveAttribute('aria-modal', 'true');
+    expect(screen.getByRole('textbox', { name: 'Nome' })).toHaveFocus();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(abrir).toHaveFocus();
   });
 
   it('Toast exibe mensagem de alerta', () => {

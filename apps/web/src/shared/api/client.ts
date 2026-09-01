@@ -1,4 +1,5 @@
-import type { EnvelopeErro } from '@odontosys/contracts';
+import { SchemaErro } from '@odontosys/contracts';
+import type { z } from 'zod';
 
 const baseUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:3333/api/v1';
 
@@ -12,7 +13,11 @@ export class ApiError extends Error {
   }
 }
 
-export async function api<T>(caminho: string, init: RequestInit = {}): Promise<T> {
+export async function api<S extends z.ZodType>(
+  caminho: string,
+  schema: S,
+  init: RequestInit = {}
+): Promise<z.output<S>> {
   const metodo = (init.method ?? 'GET').toUpperCase();
   const mutacao = !['GET', 'HEAD', 'OPTIONS'].includes(metodo);
   const resposta = await fetch(`${baseUrl}${caminho}`, {
@@ -29,9 +34,11 @@ export async function api<T>(caminho: string, init: RequestInit = {}): Promise<T
     let codigo = 'ERRO_INTERNO';
     let mensagem = 'Falha na requisição';
     try {
-      const corpo = (await resposta.json()) as EnvelopeErro;
-      codigo = corpo.erro.codigo;
-      mensagem = corpo.erro.mensagem;
+      const corpo = SchemaErro.safeParse(await resposta.json());
+      if (corpo.success) {
+        codigo = corpo.data.erro.codigo;
+        mensagem = corpo.data.erro.mensagem;
+      }
     } catch {
       mensagem = resposta.statusText;
     }
@@ -39,8 +46,8 @@ export async function api<T>(caminho: string, init: RequestInit = {}): Promise<T
   }
 
   if (resposta.status === 204) {
-    return undefined as T;
+    return schema.parse(undefined);
   }
 
-  return (await resposta.json()) as T;
+  return schema.parse(await resposta.json());
 }

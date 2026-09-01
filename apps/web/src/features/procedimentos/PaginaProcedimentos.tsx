@@ -1,162 +1,168 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { ProcedimentoResponse } from '@odontosys/contracts';
 import { useState, type ReactElement } from 'react';
 
-import { api } from '../../shared/api/client';
 import {
   Badge,
   Button,
   EmptyState,
   ErrorState,
+  Field,
   Input,
+  MobileCard,
   Modal,
   PageHeader,
   Spinner,
   Table,
+  useToast,
 } from '../../shared/ui';
+import { useProcedimentos, useSalvarProcedimento } from './api';
 
-type Item = { id: string; nome: string; duracaoMinutos: number };
+type Formulario = { nome: string; duracao: string };
+const formularioVazio: Formulario = { nome: '', duracao: '30' };
 
 export function PaginaProcedimentos(): ReactElement {
-  const queryClient = useQueryClient();
+  const consulta = useProcedimentos();
+  const toast = useToast();
   const [modalAberto, setModalAberto] = useState(false);
+  const [editando, setEditando] = useState<ProcedimentoResponse>();
+  const [formulario, setFormulario] = useState<Formulario>(formularioVazio);
+  const salvar = useSalvarProcedimento(editando?.id);
 
-  const consulta = useQuery({
-    queryKey: ['procedimentos'],
-    queryFn: () => api<{ dados: Item[] }>('/procedimentos?pagina=1&tamanho=50'),
-  });
+  const abrir = (item?: ProcedimentoResponse) => {
+    setEditando(item);
+    setFormulario(
+      item ? { nome: item.nome, duracao: String(item.duracaoMinutos) } : formularioVazio
+    );
+    setModalAberto(true);
+  };
+  const fechar = () => {
+    setModalAberto(false);
+    setEditando(undefined);
+    setFormulario(formularioVazio);
+    salvar.reset();
+  };
 
-  const [nome, setNome] = useState('');
-  const [duracao, setDuracao] = useState('30');
-
-  const criar = useMutation({
-    mutationFn: () =>
-      api('/procedimentos', {
-        method: 'POST',
-        body: JSON.stringify({ nome, duracaoMinutos: Number(duracao) }),
-      }),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['procedimentos'] });
-      setModalAberto(false);
-      setNome('');
-      setDuracao('30');
-    },
-  });
-
-  if (consulta.isLoading) return <Spinner />;
-  if (consulta.isError)
-    return <ErrorState mensagem="Não foi possível carregar o catálogo de procedimentos." />;
-
-  const dados = consulta.data?.dados ?? [];
-
-  return (
-    <section className="space-y-6">
-      <PageHeader
-        titulo="Procedimentos"
-        subtitulo="Catálogo de procedimentos odontológicos e tempos padrão de duração"
-        acao={
-          <Button type="button" onClick={() => setModalAberto(true)}>
-            <svg className="h-4 w-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M12 4v16m8-8H4"
-              />
-            </svg>
-            Novo procedimento
-          </Button>
-        }
+  if (consulta.isLoading) return <Spinner texto="Carregando procedimentos…" />;
+  if (consulta.isError) {
+    return (
+      <ErrorState
+        mensagem="Não foi possível carregar o catálogo de procedimentos."
+        onRetry={() => void consulta.refetch()}
       />
+    );
+  }
 
-      {dados.length === 0 ? (
+  const procedimentos = consulta.data?.dados ?? [];
+  return (
+    <section className="space-y-5">
+      <PageHeader
+        contexto="Configuração clínica"
+        titulo="Procedimentos"
+        subtitulo="Serviços oferecidos e duração padrão usada no agendamento simples."
+        acao={<Button onClick={() => abrir()}>＋ Novo procedimento</Button>}
+      />
+      {procedimentos.length === 0 ? (
         <EmptyState
           mensagem="Nenhum procedimento cadastrado"
-          subtitulo="Cadastre os serviços e durações da sua clínica para uso nos agendamentos."
+          subtitulo="Cadastre o primeiro serviço para habilitar novos agendamentos."
           acao={
-            <Button variant="outline" size="sm" onClick={() => setModalAberto(true)}>
+            <Button variant="outline" onClick={() => abrir()}>
               Cadastrar procedimento
             </Button>
           }
         />
       ) : (
-        <Table cabecalhos={['Procedimento', 'Duração Estimada']}>
-          {dados.map((item) => (
-            <tr key={item.id} className="hover:bg-black/[0.015] transition-colors">
+        <Table
+          cabecalhos={['Procedimento', 'Duração', 'Ações']}
+          mobile={procedimentos.map((item) => (
+            <MobileCard key={item.id} titulo={item.nome} meta={`${item.duracaoMinutos} minutos`}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => abrir(item)}
+                aria-label={`Editar ${item.nome}`}
+              >
+                Editar
+              </Button>
+            </MobileCard>
+          ))}
+        >
+          {procedimentos.map((item) => (
+            <tr key={item.id} className="hover:bg-brand-50/35">
+              <td className="px-4 py-3.5 font-semibold text-ink-900">{item.nome}</td>
               <td className="px-4 py-3.5">
-                <span className="font-semibold text-ink-900">{item.nome}</span>
+                <Badge>{item.duracaoMinutos} minutos</Badge>
               </td>
               <td className="px-4 py-3.5">
-                <Badge variant="neutral">
-                  <svg
-                    className="h-3 w-3 text-ink-400"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                  {item.duracaoMinutos} minutos
-                </Badge>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => abrir(item)}
+                  aria-label={`Editar ${item.nome}`}
+                >
+                  Editar
+                </Button>
               </td>
             </tr>
           ))}
         </Table>
       )}
 
-      {/* Modal Novo Procedimento */}
       <Modal
-        titulo="Novo Procedimento"
-        descricao="Defina o nome do serviço e a duração padrão em minutos"
+        titulo={editando ? 'Editar procedimento' : 'Novo procedimento'}
+        descricao="Defina um nome claro e a duração padrão do serviço."
         aberto={modalAberto}
-        onClose={() => setModalAberto(false)}
+        onClose={fechar}
       >
         <form
-          className="space-y-4 pt-2"
+          className="space-y-4"
           onSubmit={(evento) => {
             evento.preventDefault();
-            criar.mutate();
+            salvar.mutate(
+              { nome: formulario.nome, duracaoMinutos: Number(formulario.duracao) },
+              {
+                onSuccess: () => {
+                  toast.mostrar(editando ? 'Procedimento atualizado.' : 'Procedimento cadastrado.');
+                  fechar();
+                },
+              }
+            );
           }}
         >
-          <div className="space-y-1.5">
-            <label className="block text-xs font-semibold text-ink-700">Nome do procedimento</label>
+          <Field label="Nome do procedimento">
             <Input
-              placeholder="Ex: Limpeza Dental, Restauração em Resina"
-              value={nome}
-              onChange={(e) => setNome(e.target.value)}
+              data-autofocus
+              value={formulario.nome}
+              onChange={(evento) =>
+                setFormulario((atual) => ({ ...atual, nome: evento.target.value }))
+              }
               required
             />
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="block text-xs font-semibold text-ink-700">
-              Duração estimada (minutos)
-            </label>
+          </Field>
+          <Field label="Duração estimada (minutos)">
             <Input
               type="number"
               min={1}
-              step={5}
-              placeholder="Ex: 30, 45, 60"
-              value={duracao}
-              onChange={(e) => setDuracao(e.target.value)}
+              step={1}
+              value={formulario.duracao}
+              onChange={(evento) =>
+                setFormulario((atual) => ({ ...atual, duracao: evento.target.value }))
+              }
               required
             />
-          </div>
-
-          {criar.isError ? (
-            <ErrorState mensagem="Não foi possível cadastrar o procedimento. Verifique os campos." />
+          </Field>
+          {salvar.isError ? (
+            <ErrorState
+              mensagem="Não foi possível salvar o procedimento."
+              detalhe="Revise o nome e a duração."
+            />
           ) : null}
-
-          <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-black/5">
-            <Button variant="ghost" type="button" onClick={() => setModalAberto(false)}>
+          <div className="flex justify-end gap-2 border-t border-black/[0.06] pt-4">
+            <Button type="button" variant="ghost" onClick={fechar}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={criar.isPending}>
-              {criar.isPending ? 'Salvando…' : 'Cadastrar procedimento'}
+            <Button type="submit" disabled={salvar.isPending}>
+              {salvar.isPending ? 'Salvando…' : 'Salvar procedimento'}
             </Button>
           </div>
         </form>

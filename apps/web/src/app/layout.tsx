@@ -75,19 +75,17 @@ export function Layout(): ReactElement {
   const inicialNome = sessao.data?.nome ? sessao.data.nome.charAt(0).toUpperCase() : 'U';
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#F5F5F7]">
-      {/* Header Sticky Glassmorphism */}
-      <header className="sticky top-0 z-40 border-b border-black/5 bg-white/80 backdrop-blur-xl transition-all">
+    <div className="flex min-h-screen flex-col bg-surface-bg">
+      <header className="sticky top-0 z-40 border-b border-black/[0.06] bg-white/85 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          {/* Logo & Brand */}
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-500 text-white shadow-xs">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-xs">
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"
+                  strokeWidth="1.8"
+                  d="M7.2 3.8C9 2.7 10.4 3.6 12 3.6s3-1 4.8.2c2.5 1.7 2 5.2.8 7.5-1.6 3-1.4 8.9-3.7 9-1.3.1-1.1-4.7-1.9-4.7s-.6 4.8-1.9 4.7c-2.3-.1-2.1-6-3.7-9-1.2-2.3-1.7-5.8.8-7.5Z"
                 />
               </svg>
             </div>
@@ -96,8 +94,10 @@ export function Layout(): ReactElement {
             </div>
           </div>
 
-          {/* Desktop Navigation Segmented Pills */}
-          <nav className="hidden md:flex items-center gap-1 rounded-xl bg-black/[0.04] p-1 border border-black/5">
+          <nav
+            aria-label="Navegação principal"
+            className="hidden items-center gap-1 rounded-xl border border-black/5 bg-black/[0.04] p-1 md:flex"
+          >
             {linksFiltrados.map((link) => (
               <NavLink
                 key={link.to}
@@ -116,7 +116,6 @@ export function Layout(): ReactElement {
             ))}
           </nav>
 
-          {/* User Profile & Actions */}
           <div className="flex items-center gap-3">
             {sessao.data ? (
               <div className="hidden sm:flex items-center gap-2.5 rounded-full border border-black/5 bg-black/[0.02] pl-2 pr-3 py-1">
@@ -137,17 +136,19 @@ export function Layout(): ReactElement {
               size="sm"
               type="button"
               onClick={() => logout.mutate()}
+              disabled={logout.isPending}
               className="hidden sm:inline-flex"
             >
               Sair
             </Button>
 
-            {/* Mobile Hamburger Button */}
             <button
               type="button"
               onClick={() => setMenuAberto(!menuAberto)}
-              className="md:hidden flex h-9 w-9 items-center justify-center rounded-xl text-ink-600 hover:bg-black/5 cursor-pointer"
-              aria-label="Abrir menu"
+              className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl text-ink-600 hover:bg-black/5 md:hidden"
+              aria-label={menuAberto ? 'Fechar menu' : 'Abrir menu'}
+              aria-expanded={menuAberto}
+              aria-controls="menu-mobile"
             >
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
@@ -161,9 +162,11 @@ export function Layout(): ReactElement {
           </div>
         </div>
 
-        {/* Mobile Dropdown Menu */}
         {menuAberto ? (
-          <div className="md:hidden border-t border-black/5 bg-white px-4 py-3 space-y-2 animate-in slide-in-from-top-2 duration-150">
+          <div
+            id="menu-mobile"
+            className="space-y-2 border-t border-black/5 bg-white px-4 py-3 md:hidden"
+          >
             {sessao.data ? (
               <div className="flex items-center justify-between pb-2 border-b border-black/5">
                 <div className="flex items-center gap-2">
@@ -201,6 +204,7 @@ export function Layout(): ReactElement {
                 size="sm"
                 type="button"
                 onClick={() => logout.mutate()}
+                disabled={logout.isPending}
                 className="w-full"
               >
                 Sair da conta
@@ -210,13 +214,14 @@ export function Layout(): ReactElement {
         ) : null}
       </header>
 
-      {/* Main Content Area */}
-      <main className="flex-1 mx-auto w-full max-w-6xl p-4 sm:p-6 lg:p-8">
+      <main className="mx-auto w-full max-w-6xl flex-1 p-4 pb-24 sm:p-6 md:pb-8 lg:p-8">
         <Outlet />
       </main>
 
-      {/* Mobile Bottom Navigation Bar */}
-      <nav className="md:hidden sticky bottom-0 z-30 flex items-center justify-around border-t border-black/5 bg-white/90 backdrop-blur-xl px-2 py-2">
+      <nav
+        aria-label="Navegação móvel"
+        className="safe-bottom sticky bottom-0 z-30 flex items-center justify-around border-t border-black/5 bg-white/90 px-2 py-2 backdrop-blur-xl md:hidden"
+      >
         {linksFiltrados.map((link) => (
           <NavLink
             key={link.to}

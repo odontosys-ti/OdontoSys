@@ -3,9 +3,15 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="referrer" content="same-origin" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; base-uri 'none'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://localhost:3333 ws://localhost:*; form-action 'self'"
+    />
+    <meta name="theme-color" content="#f5f7f8" />
     <title>OdontoSys</title>
   </head>
-  <body>
+  <body class="antialiased">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

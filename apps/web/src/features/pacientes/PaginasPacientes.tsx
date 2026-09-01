@@ -1,134 +1,150 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState, type ReactElement } from 'react';
-import { Link, useNavigate, useParams } from 'react-router';
+import { useEffect, useState, type ReactElement } from 'react';
+import { Link, Navigate, useNavigate, useParams } from 'react-router';
 
-import { api } from '../../shared/api/client';
+import { papelPermite, useSessao } from '../../shared/api/hooks';
 import {
   Button,
   Card,
   EmptyState,
   ErrorState,
+  Field,
   Input,
+  MobileCard,
   PageHeader,
   Spinner,
   Table,
+  Textarea,
+  useToast,
 } from '../../shared/ui';
+import { usePaciente, usePacientes, useSalvarPaciente } from './api';
 
-type Paciente = {
-  id: string;
-  nome: string;
-  documento: string;
-  nascimento: string;
-  observacoes: string;
-};
+function formatarNascimento(valor: string): string {
+  return new Date(valor).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+}
+
+function Documento({ valor }: { valor: string }): ReactElement {
+  return <span className="font-mono text-xs text-ink-700">{valor}</span>;
+}
 
 export function PaginaPacientes(): ReactElement {
   const [busca, setBusca] = useState('');
-  const consulta = useQuery({
-    queryKey: ['pacientes', busca],
-    queryFn: () =>
-      api<{ dados: Paciente[] }>(
-        `/pacientes?pagina=1&tamanho=50${busca ? `&busca=${encodeURIComponent(busca)}` : ''}`
-      ),
-  });
+  const sessao = useSessao();
+  const consulta = usePacientes(busca);
+  const podeEditar = papelPermite(sessao.data?.papel, ['RECEPCAO', 'ADMIN']);
 
-  if (consulta.isLoading) return <Spinner />;
-  if (consulta.isError) return <ErrorState mensagem="Não foi possível carregar os pacientes." />;
+  if (consulta.isLoading) return <Spinner texto="Carregando pacientes…" />;
+  if (consulta.isError) {
+    return (
+      <ErrorState
+        mensagem="Não foi possível carregar os pacientes."
+        onRetry={() => void consulta.refetch()}
+      />
+    );
+  }
 
-  const dados = consulta.data?.dados ?? [];
+  const pacientes = consulta.data?.dados ?? [];
+  const botaoNovo = podeEditar ? (
+    <Link to="/pacientes/novo">
+      <Button type="button">＋ Novo paciente</Button>
+    </Link>
+  ) : undefined;
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-5">
       <PageHeader
+        contexto="Cadastro clínico"
         titulo="Pacientes"
-        subtitulo="Gestão cadastral de prontuários e pacientes da clínica"
-        acao={
-          <Link to="/pacientes/novo">
-            <Button type="button">
-              <svg className="h-4 w-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M12 4v16m8-8H4"
-                />
-              </svg>
-              Novo paciente
-            </Button>
-          </Link>
-        }
+        subtitulo="Dados cadastrais essenciais, organizados para consulta rápida e segura."
+        acao={botaoNovo}
       />
 
-      {/* Search Bar */}
-      <div className="relative max-w-md">
-        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-ink-400">
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-            />
-          </svg>
-        </div>
-        <Input
-          placeholder="Buscar paciente por nome…"
-          value={busca}
-          onChange={(e) => setBusca(e.target.value)}
-          className="pl-10"
-        />
+      <div className="flex items-center justify-between gap-3">
+        <label className="relative block w-full max-w-md">
+          <span className="sr-only">Buscar paciente por nome</span>
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-y-0 left-3.5 grid place-items-center text-ink-400"
+          >
+            ⌕
+          </span>
+          <Input
+            type="search"
+            placeholder="Buscar paciente por nome…"
+            value={busca}
+            onChange={(evento) => setBusca(evento.target.value)}
+            className="pl-10"
+          />
+        </label>
+        <span className="hidden text-xs font-medium text-ink-500 sm:block">
+          {consulta.data?.paginacao.total ?? 0} cadastrados
+        </span>
       </div>
 
-      {dados.length === 0 ? (
+      {pacientes.length === 0 ? (
         <EmptyState
           mensagem="Nenhum paciente encontrado"
           subtitulo={
-            busca
-              ? 'Tente ajustar os termos da sua busca.'
-              : 'Comece adicionando o primeiro paciente da sua clínica.'
+            busca ? 'Revise o nome informado.' : 'A clínica ainda não possui pacientes ativos.'
           }
-          acao={
-            !busca ? (
-              <Link to="/pacientes/novo">
-                <Button variant="outline" size="sm">
-                  Cadastrar paciente
-                </Button>
-              </Link>
-            ) : null
-          }
+          acao={!busca ? botaoNovo : undefined}
         />
       ) : (
-        <Table cabecalhos={['Paciente', 'Documento', 'Data de Nascimento', 'Ações']}>
-          {dados.map((item) => (
-            <tr key={item.id} className="hover:bg-black/[0.015] transition-colors">
+        <Table
+          cabecalhos={['Paciente', 'Documento', 'Nascimento', ...(podeEditar ? ['Ações'] : [])]}
+          mobile={pacientes.map((paciente) => (
+            <MobileCard
+              key={paciente.id}
+              titulo={paciente.nome}
+              meta={`Nascimento: ${formatarNascimento(paciente.nascimento)}`}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <Documento valor={paciente.documento} />
+                {podeEditar ? (
+                  <Link to={`/pacientes/${paciente.id}`} aria-label={`Editar ${paciente.nome}`}>
+                    <Button variant="outline" size="sm">
+                      Editar
+                    </Button>
+                  </Link>
+                ) : null}
+              </div>
+            </MobileCard>
+          ))}
+        >
+          {pacientes.map((paciente) => (
+            <tr key={paciente.id} className="transition-colors hover:bg-brand-50/35">
               <td className="px-4 py-3.5">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-50 text-brand-700 text-xs font-semibold border border-brand-100">
-                    {item.nome.charAt(0).toUpperCase()}
-                  </div>
+                  <span
+                    aria-hidden="true"
+                    className="grid h-9 w-9 place-items-center rounded-xl bg-brand-50 text-xs font-bold text-brand-700"
+                  >
+                    {paciente.nome.charAt(0).toUpperCase()}
+                  </span>
                   <div>
-                    <span className="font-semibold text-ink-900 block">{item.nome}</span>
-                    {item.observacoes ? (
-                      <span className="text-xs text-ink-400 block truncate max-w-xs">
-                        {item.observacoes}
+                    <span className="block font-semibold text-ink-900">{paciente.nome}</span>
+                    {paciente.observacoes ? (
+                      <span className="block max-w-xs truncate text-xs text-ink-400">
+                        {paciente.observacoes}
                       </span>
                     ) : null}
                   </div>
                 </div>
               </td>
-              <td className="px-4 py-3.5 font-mono text-xs text-ink-700">{item.documento}</td>
-              <td className="px-4 py-3.5 text-xs text-ink-600">
-                {item.nascimento
-                  ? new Date(item.nascimento).toLocaleDateString('pt-BR', { timeZone: 'UTC' })
-                  : '—'}
-              </td>
               <td className="px-4 py-3.5">
-                <Link to={`/pacientes/${item.id}`}>
-                  <Button variant="ghost" size="sm">
-                    Editar
-                  </Button>
-                </Link>
+                <Documento valor={paciente.documento} />
               </td>
+              <td className="px-4 py-3.5 text-sm text-ink-600">
+                {formatarNascimento(paciente.nascimento)}
+              </td>
+              {podeEditar ? (
+                <td className="px-4 py-3.5">
+                  <Link to={`/pacientes/${paciente.id}`} aria-label={`Editar ${paciente.nome}`}>
+                    <Button variant="ghost" size="sm">
+                      Editar
+                    </Button>
+                  </Link>
+                </td>
+              ) : null}
             </tr>
           ))}
         </Table>
@@ -140,135 +156,117 @@ export function PaginaPacientes(): ReactElement {
 export function PaginaPacienteFormulario(): ReactElement {
   const { id } = useParams();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const existente = useQuery({
-    queryKey: ['paciente', id],
-    enabled: Boolean(id),
-    queryFn: () => api<Paciente>(`/pacientes/${id}`),
-  });
-
-  const salvar = useMutation({
-    mutationFn: (payload: {
-      nome: string;
-      documento: string;
-      nascimento: string;
-      observacoes: string;
-    }) =>
-      api(id ? `/pacientes/${id}` : '/pacientes', {
-        method: id ? 'PATCH' : 'POST',
-        body: JSON.stringify(payload),
-      }),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['pacientes'] });
-      navigate('/pacientes');
-    },
-  });
-
+  const sessao = useSessao();
+  const consulta = usePaciente(id);
+  const salvar = useSalvarPaciente(id);
+  const toast = useToast();
   const [nome, setNome] = useState('');
   const [documento, setDocumento] = useState('');
   const [nascimento, setNascimento] = useState('');
   const [observacoes, setObservacoes] = useState('');
 
-  if (id && existente.isLoading) return <Spinner />;
-  if (id && existente.isError) return <ErrorState mensagem="Paciente não encontrado." />;
+  useEffect(() => {
+    if (!consulta.data) return;
+    setNome(consulta.data.nome);
+    setDocumento(consulta.data.documento);
+    setNascimento(consulta.data.nascimento.slice(0, 10));
+    setObservacoes(consulta.data.observacoes);
+  }, [consulta.data]);
 
-  const inicial = existente.data;
+  if (sessao.data && !papelPermite(sessao.data.papel, ['RECEPCAO', 'ADMIN'])) {
+    return <Navigate to="/pacientes" replace />;
+  }
+  if (id && consulta.isLoading) return <Spinner texto="Carregando cadastro…" />;
+  if (id && consulta.isError) {
+    return (
+      <ErrorState mensagem="Paciente não encontrado." onRetry={() => void consulta.refetch()} />
+    );
+  }
 
   return (
-    <section className="max-w-2xl space-y-6">
-      <div className="flex items-center gap-2">
-        <Link to="/pacientes">
-          <Button variant="ghost" size="sm">
-            <svg className="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M15 19l-7-7 7-7"
-              />
-            </svg>
-            Voltar
-          </Button>
-        </Link>
-      </div>
-
+    <section className="mx-auto max-w-3xl space-y-5">
+      <Link
+        to="/pacientes"
+        className="inline-flex text-sm font-semibold text-brand-700 hover:underline"
+      >
+        ← Voltar aos pacientes
+      </Link>
       <PageHeader
+        contexto="Cadastro clínico"
         titulo={id ? 'Editar paciente' : 'Novo paciente'}
-        subtitulo={
-          id
-            ? 'Atualize os dados cadastrais do paciente'
-            : 'Preencha as informações básicas para abrir o prontuário'
-        }
+        subtitulo="Mantenha somente as informações essenciais e revise os dados antes de salvar."
       />
-
       <Card>
         <form
-          className="space-y-4"
+          className="space-y-5"
           onSubmit={(evento) => {
             evento.preventDefault();
-            salvar.mutate({
-              nome: nome || inicial?.nome || '',
-              documento: documento || inicial?.documento || '',
-              nascimento: nascimento || inicial?.nascimento || '',
-              observacoes: observacoes || inicial?.observacoes || '',
-            });
+            salvar.mutate(
+              {
+                nome,
+                documento,
+                nascimento: new Date(`${nascimento}T00:00:00.000Z`).toISOString(),
+                observacoes,
+              },
+              {
+                onSuccess: () => {
+                  toast.mostrar(id ? 'Paciente atualizado.' : 'Paciente cadastrado.');
+                  navigate('/pacientes');
+                },
+              }
+            );
           }}
         >
-          <div className="space-y-1.5">
-            <label className="block text-xs font-semibold text-ink-700">Nome completo</label>
+          <Field label="Nome completo">
             <Input
-              defaultValue={inicial?.nome}
-              placeholder="Ex: João da Silva"
-              onChange={(e) => setNome(e.target.value)}
-              required={!id}
+              value={nome}
+              onChange={(evento) => setNome(evento.target.value)}
+              autoComplete="name"
+              required
+              data-autofocus
             />
-          </div>
-
+          </Field>
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <label className="block text-xs font-semibold text-ink-700">
-                Documento (CPF / RG)
-              </label>
+            <Field label="Documento">
               <Input
-                defaultValue={inicial?.documento}
-                placeholder="Ex: 12345678900"
-                onChange={(e) => setDocumento(e.target.value)}
-                required={!id}
+                value={documento}
+                onChange={(evento) => setDocumento(evento.target.value)}
+                inputMode="numeric"
+                minLength={11}
+                required
               />
-            </div>
-            <div className="space-y-1.5">
-              <label className="block text-xs font-semibold text-ink-700">Data de nascimento</label>
+            </Field>
+            <Field label="Data de nascimento">
               <Input
                 type="date"
-                defaultValue={inicial?.nascimento?.slice(0, 10)}
-                onChange={(e) => setNascimento(e.target.value)}
-                required={!id}
+                value={nascimento}
+                onChange={(evento) => setNascimento(evento.target.value)}
+                required
               />
-            </div>
+            </Field>
           </div>
-
-          <div className="space-y-1.5">
-            <label className="block text-xs font-semibold text-ink-700">
-              Observações clínicas gerais
-            </label>
-            <Input
-              defaultValue={inicial?.observacoes}
-              placeholder="Alergias, observações ou notas de atendimento"
-              onChange={(e) => setObservacoes(e.target.value)}
+          <Field
+            label="Observações gerais"
+            dica="Não registre informações além do necessário para o cadastro base."
+          >
+            <Textarea
+              value={observacoes}
+              onChange={(evento) => setObservacoes(evento.target.value)}
             />
-          </div>
-
+          </Field>
           {salvar.isError ? (
-            <ErrorState mensagem="Não foi possível salvar os dados do paciente. Verifique os campos." />
+            <ErrorState
+              mensagem="Não foi possível salvar o paciente."
+              detalhe="Revise os campos e tente novamente."
+            />
           ) : null}
-
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-black/5">
+          <div className="flex flex-col-reverse gap-2 border-t border-black/[0.06] pt-5 sm:flex-row sm:justify-end">
             <Link to="/pacientes">
-              <Button variant="ghost" type="button">
+              <Button variant="ghost" type="button" className="w-full sm:w-auto">
                 Cancelar
               </Button>
             </Link>
-            <Button type="submit" disabled={salvar.isPending}>
+            <Button type="submit" disabled={salvar.isPending} className="w-full sm:w-auto">
               {salvar.isPending ? 'Salvando…' : id ? 'Salvar alterações' : 'Cadastrar paciente'}
             </Button>
           </div>

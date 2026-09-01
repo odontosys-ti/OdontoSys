@@ -2,121 +2,104 @@ import { useState, type ReactElement } from 'react';
 import { Navigate, useNavigate } from 'react-router';
 
 import { useLogin, useSessao } from '../../shared/api/hooks';
-import { Button, Card, ErrorState, Input } from '../../shared/ui';
+import { Button, Card, ErrorState, Field, Input } from '../../shared/ui';
 
 export function PaginaLogin(): ReactElement {
   const sessao = useSessao();
   const login = useLogin();
   const navigate = useNavigate();
-  const [email, setEmail] = useState('recepcao@odontosys.local');
-  const [senha, setSenha] = useState('senha123');
+  const [email, setEmail] = useState('');
+  const [senha, setSenha] = useState('');
 
-  if (sessao.data) {
-    return <Navigate to="/pacientes" replace />;
-  }
-
-  const perfisDemo = [
-    { label: 'Recepção', email: 'recepcao@odontosys.local', senha: 'senha123' },
-    { label: 'Dentista', email: 'dentista@odontosys.local', senha: 'senha123' },
-    { label: 'Admin', email: 'admin@odontosys.local', senha: 'senha123' },
-  ];
+  if (sessao.data) return <Navigate to="/pacientes" replace />;
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-4 bg-gradient-to-b from-[#F5F5F7] via-[#ECECEF] to-[#E5E5EA]">
-      <div className="w-full max-w-md space-y-6">
-        {/* Brand Header */}
-        <div className="flex flex-col items-center text-center space-y-2">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-500 text-white shadow-card">
-            <svg className="h-7 w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"
-              />
-            </svg>
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight text-ink-900">OdontoSys</h1>
-          <p className="text-sm text-ink-600">Sistema Integrado de Gestão Odontológica</p>
-        </div>
-
-        {/* Login Form Card */}
-        <Card className="p-6 sm:p-8 space-y-5">
+    <main className="relative grid min-h-screen place-items-center overflow-hidden bg-surface-bg p-4">
+      <div
+        aria-hidden="true"
+        className="absolute -left-24 -top-32 h-96 w-96 rounded-full bg-brand-100/65 blur-3xl"
+      />
+      <div
+        aria-hidden="true"
+        className="absolute -bottom-40 -right-20 h-96 w-96 rounded-full bg-clinical-100/70 blur-3xl"
+      />
+      <div className="relative grid w-full max-w-4xl overflow-hidden rounded-[2rem] border border-white/70 bg-white/75 shadow-modal backdrop-blur-xl md:grid-cols-[0.85fr_1.15fr]">
+        <aside className="relative hidden overflow-hidden bg-gradient-to-br from-brand-700 to-brand-500 p-10 text-white md:flex md:flex-col md:justify-between">
           <div>
-            <h2 className="text-xl font-bold tracking-tight text-ink-900">Entrar na plataforma</h2>
-            <p className="text-xs text-ink-600 mt-0.5">
-              Insira suas credenciais para acessar sua clínica
+            <span className="grid h-12 w-12 place-items-center rounded-2xl bg-white/15 text-2xl ring-1 ring-white/20">
+              ◡
+            </span>
+            <p className="mt-6 text-xs font-bold uppercase tracking-[0.18em] text-white/70">
+              OdontoSys
+            </p>
+            <h1 className="mt-2 text-3xl font-bold tracking-[-0.04em]">
+              Gestão clínica com clareza.
+            </h1>
+            <p className="mt-3 text-sm leading-relaxed text-white/75">
+              Uma base segura e direta para cadastros e agendamentos odontológicos.
             </p>
           </div>
+          <p className="text-xs text-white/60">Ambiente interno da clínica</p>
+        </aside>
 
+        <Card className="rounded-none border-0 bg-transparent p-6 shadow-none sm:p-10">
+          <div className="mb-7 md:hidden">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-700">
+              OdontoSys
+            </p>
+          </div>
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold tracking-[-0.035em] text-ink-900">
+              Entrar na plataforma
+            </h2>
+            <p className="mt-1.5 text-sm text-ink-600">
+              Use as credenciais fornecidas pela administração da clínica.
+            </p>
+          </div>
           <form
             className="space-y-4"
             onSubmit={(evento) => {
               evento.preventDefault();
               login.mutate(
                 { email, senha },
-                {
-                  onSuccess: () => navigate('/pacientes'),
-                }
+                { onSuccess: () => navigate('/pacientes', { replace: true }) }
               );
             }}
           >
-            <div className="space-y-1.5">
-              <label className="block text-xs font-semibold text-ink-700">
-                E-mail profissional
-              </label>
+            <Field label="E-mail profissional">
               <Input
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(evento) => setEmail(evento.target.value)}
                 type="email"
-                placeholder="seu.email@odontosys.local"
+                autoComplete="username"
+                placeholder="nome@clinica.com"
                 required
+                data-autofocus
               />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="block text-xs font-semibold text-ink-700">Senha de acesso</label>
+            </Field>
+            <Field label="Senha">
               <Input
                 value={senha}
-                onChange={(e) => setSenha(e.target.value)}
+                onChange={(evento) => setSenha(evento.target.value)}
                 type="password"
-                placeholder="••••••••"
+                autoComplete="current-password"
+                placeholder="Sua senha"
+                minLength={6}
                 required
               />
-            </div>
-
+            </Field>
             {login.isError ? (
-              <ErrorState mensagem="E-mail ou senha incorretos. Verifique suas credenciais." />
+              <ErrorState
+                mensagem="Não foi possível entrar."
+                detalhe="Confira o e-mail e a senha informados."
+              />
             ) : null}
-
-            <Button type="submit" size="lg" className="w-full mt-2" disabled={login.isPending}>
+            <Button type="submit" size="lg" className="mt-2 w-full" disabled={login.isPending}>
               {login.isPending ? 'Autenticando…' : 'Entrar'}
             </Button>
           </form>
-
-          {/* Quick Demo Fill Buttons */}
-          <div className="pt-3 border-t border-black/5">
-            <p className="text-[11px] font-medium text-ink-400 mb-2 uppercase tracking-wider text-center">
-              Acesso rápido para testes
-            </p>
-            <div className="grid grid-cols-3 gap-1.5">
-              {perfisDemo.map((perfil) => (
-                <button
-                  key={perfil.label}
-                  type="button"
-                  onClick={() => {
-                    setEmail(perfil.email);
-                    setSenha(perfil.senha);
-                  }}
-                  className="rounded-lg border border-black/5 bg-black/[0.02] py-1.5 px-2 text-xs font-medium text-ink-700 hover:bg-black/[0.05] hover:text-ink-900 transition-colors cursor-pointer"
-                >
-                  {perfil.label}
-                </button>
-              ))}
-            </div>
-          </div>
         </Card>
       </div>
-    </div>
+    </main>
   );
 }

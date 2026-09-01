@@ -1,179 +1,198 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { AgendamentoResponse } from '@odontosys/contracts';
 import { useMemo, useState, type ReactElement } from 'react';
 
-import { api } from '../../shared/api/client';
+import { papelPermite, useSessao } from '../../shared/api/hooks';
 import {
   Button,
   Card,
   EmptyState,
   ErrorState,
+  Field,
   Input,
+  MobileCard,
   Modal,
   PageHeader,
   Select,
   Spinner,
   StatusBadge,
   Table,
+  useToast,
 } from '../../shared/ui';
+import { usePacientes } from '../pacientes/api';
+import { useProcedimentos } from '../procedimentos/api';
+import { useProfissionais } from '../profissionais/api';
+import {
+  useAgendamentos,
+  useCancelarAgendamento,
+  useCriarAgendamento,
+  useReagendarAgendamento,
+} from './api';
 
-type Agendamento = {
-  id: string;
-  pacienteId: string;
-  profissionalId: string;
-  procedimentoId: string;
-  inicio: string;
-  fim: string;
-  status: string;
-};
+function paraCampoData(valor: Date | string): string {
+  const data = typeof valor === 'string' ? new Date(valor) : valor;
+  const local = new Date(data.getTime() - data.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
+function paraIso(valor: string, fallback: string): string {
+  const data = new Date(valor);
+  return Number.isNaN(data.getTime()) ? fallback : data.toISOString();
+}
+
+function formatarHorario(valor: string): string {
+  return new Date(valor).toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
 
 export function PaginaAgendamentos(): ReactElement {
-  const agora = useMemo(() => new Date(), []);
-  const dePadrao = new Date(agora.getTime() - 24 * 60 * 60 * 1000).toISOString();
-  const atePadrao = new Date(agora.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString();
-
-  const [de, setDe] = useState(dePadrao.slice(0, 16));
-  const [ate, setAte] = useState(atePadrao.slice(0, 16));
+  const periodo = useMemo(() => {
+    const agora = new Date();
+    return {
+      de: new Date(agora.getTime() - 24 * 60 * 60 * 1_000).toISOString(),
+      ate: new Date(agora.getTime() + 14 * 24 * 60 * 60 * 1_000).toISOString(),
+    };
+  }, []);
+  const [de, setDe] = useState(() => paraCampoData(periodo.de));
+  const [ate, setAte] = useState(() => paraCampoData(periodo.ate));
   const [filtroProfissional, setFiltroProfissional] = useState('');
-  const [modalAberto, setModalAberto] = useState(false);
+  const deIso = paraIso(de, periodo.de);
+  const ateIso = paraIso(ate, periodo.ate);
 
-  const queryClient = useQueryClient();
+  const sessao = useSessao();
+  const consulta = useAgendamentos(deIso, ateIso, filtroProfissional);
+  const pacientes = usePacientes('');
+  const profissionais = useProfissionais();
+  const procedimentos = useProcedimentos();
+  const criar = useCriarAgendamento();
+  const cancelar = useCancelarAgendamento();
+  const toast = useToast();
+  const podeEditar = papelPermite(sessao.data?.papel, ['RECEPCAO', 'ADMIN']);
 
-  const consulta = useQuery({
-    queryKey: ['agendamentos', de, ate, filtroProfissional],
-    queryFn: () => {
-      const url = `/agendamentos?pagina=1&tamanho=50&de=${new Date(de).toISOString()}&ate=${new Date(ate).toISOString()}${
-        filtroProfissional ? `&profissionalId=${filtroProfissional}` : ''
-      }`;
-      return api<{ dados: Agendamento[] }>(url);
-    },
-  });
-
-  const profissionais = useQuery({
-    queryKey: ['profissionais'],
-    queryFn: () =>
-      api<{ dados: Array<{ id: string; nome: string; especialidade: string }> }>(
-        '/profissionais?pagina=1&tamanho=50'
-      ),
-  });
-
-  const pacientes = useQuery({
-    queryKey: ['pacientes', ''],
-    queryFn: () =>
-      api<{ dados: Array<{ id: string; nome: string; documento: string }> }>(
-        '/pacientes?pagina=1&tamanho=50'
-      ),
-  });
-
-  const procedimentos = useQuery({
-    queryKey: ['procedimentos'],
-    queryFn: () =>
-      api<{ dados: Array<{ id: string; nome: string; duracaoMinutos: number }> }>(
-        '/procedimentos?pagina=1&tamanho=50'
-      ),
-  });
-
+  const [modalNovo, setModalNovo] = useState(false);
   const [pacienteId, setPacienteId] = useState('');
   const [profissionalId, setProfissionalId] = useState('');
   const [procedimentoId, setProcedimentoId] = useState('');
   const [inicio, setInicio] = useState('');
+  const [reagendando, setReagendando] = useState<AgendamentoResponse>();
+  const [novoInicio, setNovoInicio] = useState('');
+  const reagendar = useReagendarAgendamento(reagendando?.id);
+  const [cancelando, setCancelando] = useState<AgendamentoResponse>();
 
-  const criar = useMutation({
-    mutationFn: () =>
-      api('/agendamentos', {
-        method: 'POST',
-        body: JSON.stringify({
-          pacienteId,
-          profissionalId,
-          procedimentoId,
-          inicio: new Date(inicio).toISOString(),
-        }),
-      }),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['agendamentos'] });
-      setModalAberto(false);
-      setPacienteId('');
-      setProfissionalId('');
-      setProcedimentoId('');
-      setInicio('');
-    },
-  });
+  const nomePaciente = (id: string) =>
+    pacientes.data?.dados.find((item) => item.id === id)?.nome ?? `Paciente ${id.slice(0, 8)}`;
+  const nomeProfissional = (id: string) =>
+    profissionais.data?.dados.find((item) => item.id === id)?.nome ??
+    `Profissional ${id.slice(0, 8)}`;
+  const nomeProcedimento = (id: string) =>
+    procedimentos.data?.dados.find((item) => item.id === id)?.nome ??
+    `Procedimento ${id.slice(0, 8)}`;
 
-  const cancelar = useMutation({
-    mutationFn: (id: string) => api(`/agendamentos/${id}`, { method: 'DELETE' }),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['agendamentos'] });
-    },
-  });
+  const fecharNovo = () => {
+    setModalNovo(false);
+    setPacienteId('');
+    setProfissionalId('');
+    setProcedimentoId('');
+    setInicio('');
+    criar.reset();
+  };
+  const abrirReagendamento = (item: AgendamentoResponse) => {
+    setReagendando(item);
+    setNovoInicio(paraCampoData(item.inicio));
+  };
+  const fecharReagendamento = () => {
+    setReagendando(undefined);
+    setNovoInicio('');
+    reagendar.reset();
+  };
 
-  if (consulta.isLoading) return <Spinner />;
-  if (consulta.isError)
-    return <ErrorState mensagem="Não foi possível carregar os agendamentos do período." />;
+  if (consulta.isLoading) return <Spinner texto="Carregando agendamentos…" />;
+  if (consulta.isError) {
+    return (
+      <ErrorState
+        mensagem="Não foi possível carregar os agendamentos do período."
+        onRetry={() => void consulta.refetch()}
+      />
+    );
+  }
 
-  const dados = consulta.data?.dados ?? [];
+  const agendamentos = consulta.data?.dados ?? [];
+  const controles = (item: AgendamentoResponse) =>
+    podeEditar && item.status === 'AGENDADO' ? (
+      <div className="flex flex-wrap gap-1">
+        <Button variant="ghost" size="sm" onClick={() => abrirReagendamento(item)}>
+          Reagendar
+        </Button>
+        <Button
+          variant="danger"
+          size="sm"
+          onClick={() => setCancelando(item)}
+          aria-label={`Cancelar agendamento de ${nomePaciente(item.pacienteId)}`}
+        >
+          Cancelar
+        </Button>
+      </div>
+    ) : null;
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-5">
       <PageHeader
+        contexto="Operação clínica"
         titulo="Agendamentos"
-        subtitulo="Consulta cronológica e agendamento de consultas por período"
+        subtitulo="Consulta cronológica por período, com criação, reagendamento e cancelamento simples."
         acao={
-          <Button type="button" onClick={() => setModalAberto(true)}>
-            <svg className="h-4 w-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M12 4v16m8-8H4"
-              />
-            </svg>
-            Novo agendamento
-          </Button>
+          podeEditar ? (
+            <Button onClick={() => setModalNovo(true)}>＋ Novo agendamento</Button>
+          ) : undefined
         }
       />
 
-      {/* Filter Card */}
       <Card className="p-4 sm:p-5">
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="space-y-1">
-            <label className="block text-xs font-semibold text-ink-600">
-              De (data/hora inicial)
-            </label>
-            <Input type="datetime-local" value={de} onChange={(e) => setDe(e.target.value)} />
-          </div>
-          <div className="space-y-1">
-            <label className="block text-xs font-semibold text-ink-600">
-              Até (data/hora final)
-            </label>
-            <Input type="datetime-local" value={ate} onChange={(e) => setAte(e.target.value)} />
-          </div>
-          <div className="space-y-1">
-            <label className="block text-xs font-semibold text-ink-600">
-              Filtrar por profissional
-            </label>
+        <div className="grid gap-3 md:grid-cols-3">
+          <Field label="Início do período">
+            <Input
+              type="datetime-local"
+              value={de}
+              onChange={(evento) => setDe(evento.target.value)}
+            />
+          </Field>
+          <Field label="Fim do período">
+            <Input
+              type="datetime-local"
+              value={ate}
+              onChange={(evento) => setAte(evento.target.value)}
+            />
+          </Field>
+          <Field label="Profissional">
             <Select
               value={filtroProfissional}
-              onChange={(e) => setFiltroProfissional(e.target.value)}
+              onChange={(evento) => setFiltroProfissional(evento.target.value)}
             >
               <option value="">Todos os profissionais</option>
               {(profissionais.data?.dados ?? []).map((item) => (
                 <option key={item.id} value={item.id}>
-                  {item.nome} ({item.especialidade})
+                  {item.nome} — {item.especialidade}
                 </option>
               ))}
             </Select>
-          </div>
+          </Field>
         </div>
       </Card>
 
-      {/* Appointment Table */}
-      {dados.length === 0 ? (
+      {agendamentos.length === 0 ? (
         <EmptyState
-          mensagem="Nenhum agendamento encontrado no período"
-          subtitulo="Ajuste as datas de filtro ou crie um novo agendamento para a clínica."
+          mensagem="Nenhum agendamento neste período"
+          subtitulo="Altere o intervalo consultado ou registre um novo horário."
           acao={
-            <Button variant="outline" size="sm" onClick={() => setModalAberto(true)}>
-              Criar agendamento
-            </Button>
+            podeEditar ? (
+              <Button variant="outline" onClick={() => setModalNovo(true)}>
+                Criar agendamento
+              </Button>
+            ) : undefined
           }
         />
       ) : (
@@ -182,162 +201,241 @@ export function PaginaAgendamentos(): ReactElement {
             'Paciente',
             'Profissional',
             'Procedimento',
-            'Horário Inicial',
-            'Horário Final',
+            'Início',
+            'Fim',
             'Status',
-            'Ações',
+            ...(podeEditar ? ['Ações'] : []),
           ]}
+          mobile={agendamentos.map((item) => (
+            <MobileCard
+              key={item.id}
+              titulo={nomePaciente(item.pacienteId)}
+              meta={formatarHorario(item.inicio)}
+            >
+              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+                <dt className="text-ink-400">Profissional</dt>
+                <dd className="text-right text-ink-700">{nomeProfissional(item.profissionalId)}</dd>
+                <dt className="text-ink-400">Procedimento</dt>
+                <dd className="text-right text-ink-700">{nomeProcedimento(item.procedimentoId)}</dd>
+              </dl>
+              <div className="flex items-center justify-between gap-2">
+                <StatusBadge status={item.status} />
+                {controles(item)}
+              </div>
+            </MobileCard>
+          ))}
         >
-          {dados.map((item) => {
-            const pacienteNome =
-              pacientes.data?.dados.find((p) => p.id === item.pacienteId)?.nome ??
-              item.pacienteId.slice(0, 8);
-            const profissionalNome =
-              profissionais.data?.dados.find((p) => p.id === item.profissionalId)?.nome ??
-              item.profissionalId.slice(0, 8);
-            const procedimentoNome =
-              procedimentos.data?.dados.find((p) => p.id === item.procedimentoId)?.nome ??
-              item.procedimentoId.slice(0, 8);
-
-            return (
-              <tr key={item.id} className="hover:bg-black/[0.015] transition-colors">
-                <td className="px-4 py-3.5">
-                  <div className="flex items-center gap-2.5">
-                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-50 text-brand-700 text-xs font-semibold">
-                      {pacienteNome.charAt(0).toUpperCase()}
-                    </div>
-                    <span className="font-semibold text-ink-900">{pacienteNome}</span>
-                  </div>
-                </td>
-                <td className="px-4 py-3.5 text-xs text-ink-700">{profissionalNome}</td>
-                <td className="px-4 py-3.5 text-xs text-ink-700">{procedimentoNome}</td>
-                <td className="px-4 py-3.5 text-xs font-mono text-ink-600">
-                  {new Date(item.inicio).toLocaleString('pt-BR', {
-                    day: '2-digit',
-                    month: '2-digit',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </td>
-                <td className="px-4 py-3.5 text-xs font-mono text-ink-600">
-                  {new Date(item.fim).toLocaleString('pt-BR', {
-                    day: '2-digit',
-                    month: '2-digit',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </td>
-                <td className="px-4 py-3.5">
-                  <StatusBadge status={item.status} />
-                </td>
-                <td className="px-4 py-3.5">
-                  {item.status === 'AGENDADO' ? (
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      type="button"
-                      disabled={cancelar.isPending}
-                      onClick={() => cancelar.mutate(item.id)}
-                    >
-                      Cancelar
-                    </Button>
-                  ) : (
-                    <span className="text-xs text-ink-400">—</span>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
+          {agendamentos.map((item) => (
+            <tr key={item.id} className="hover:bg-brand-50/35">
+              <td className="px-4 py-3.5 font-semibold text-ink-900">
+                {nomePaciente(item.pacienteId)}
+              </td>
+              <td className="px-4 py-3.5 text-xs text-ink-700">
+                {nomeProfissional(item.profissionalId)}
+              </td>
+              <td className="px-4 py-3.5 text-xs text-ink-700">
+                {nomeProcedimento(item.procedimentoId)}
+              </td>
+              <td className="whitespace-nowrap px-4 py-3.5 text-xs text-ink-600">
+                {formatarHorario(item.inicio)}
+              </td>
+              <td className="whitespace-nowrap px-4 py-3.5 text-xs text-ink-600">
+                {formatarHorario(item.fim)}
+              </td>
+              <td className="px-4 py-3.5">
+                <StatusBadge status={item.status} />
+              </td>
+              {podeEditar ? <td className="px-4 py-3.5">{controles(item)}</td> : null}
+            </tr>
+          ))}
         </Table>
       )}
 
-      {/* Modal Novo Agendamento */}
       <Modal
-        titulo="Novo Agendamento"
-        descricao="Selecione os participantes e o horário do atendimento"
-        aberto={modalAberto}
-        onClose={() => setModalAberto(false)}
+        titulo="Novo agendamento"
+        descricao="Selecione recursos ativos e informe o horário inicial."
+        aberto={modalNovo}
+        onClose={fecharNovo}
       >
         <form
-          className="space-y-4 pt-2"
+          className="space-y-4"
           onSubmit={(evento) => {
             evento.preventDefault();
-            criar.mutate();
+            criar.mutate(
+              {
+                pacienteId,
+                profissionalId,
+                procedimentoId,
+                inicio: new Date(inicio).toISOString(),
+              },
+              {
+                onSuccess: () => {
+                  toast.mostrar('Agendamento criado.');
+                  fecharNovo();
+                },
+              }
+            );
           }}
         >
-          <div className="space-y-1.5">
-            <label className="block text-xs font-semibold text-ink-700">Paciente</label>
-            <Select value={pacienteId} onChange={(e) => setPacienteId(e.target.value)} required>
-              <option value="">Selecione um paciente…</option>
+          <Field label="Paciente">
+            <Select
+              data-autofocus
+              value={pacienteId}
+              onChange={(evento) => setPacienteId(evento.target.value)}
+              required
+            >
+              <option value="">Selecione…</option>
               {(pacientes.data?.dados ?? []).map((item) => (
                 <option key={item.id} value={item.id}>
-                  {item.nome} ({item.documento})
+                  {item.nome} — {item.documento}
                 </option>
               ))}
             </Select>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="block text-xs font-semibold text-ink-700">
-              Profissional / Dentista
-            </label>
+          </Field>
+          <Field label="Profissional">
             <Select
               value={profissionalId}
-              onChange={(e) => setProfissionalId(e.target.value)}
+              onChange={(evento) => setProfissionalId(evento.target.value)}
               required
             >
-              <option value="">Selecione um profissional…</option>
+              <option value="">Selecione…</option>
               {(profissionais.data?.dados ?? []).map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.nome} — {item.especialidade}
                 </option>
               ))}
             </Select>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="block text-xs font-semibold text-ink-700">Procedimento</label>
+          </Field>
+          <Field label="Procedimento">
             <Select
               value={procedimentoId}
-              onChange={(e) => setProcedimentoId(e.target.value)}
+              onChange={(evento) => setProcedimentoId(evento.target.value)}
               required
             >
-              <option value="">Selecione um procedimento…</option>
+              <option value="">Selecione…</option>
               {(procedimentos.data?.dados ?? []).map((item) => (
                 <option key={item.id} value={item.id}>
-                  {item.nome} ({item.duracaoMinutos} min)
+                  {item.nome} — {item.duracaoMinutos} min
                 </option>
               ))}
             </Select>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="block text-xs font-semibold text-ink-700">
-              Data e horário de início
-            </label>
+          </Field>
+          <Field label="Data e horário de início">
             <Input
               type="datetime-local"
               value={inicio}
-              onChange={(e) => setInicio(e.target.value)}
+              onChange={(evento) => setInicio(evento.target.value)}
               required
             />
-          </div>
-
+          </Field>
           {criar.isError ? (
-            <ErrorState mensagem="Não foi possível realizar o agendamento. Verifique se o profissional já possui outro horário marcado ou se o horário é no passado." />
+            <ErrorState
+              mensagem="Não foi possível criar o agendamento."
+              detalhe="Confira o horário e possíveis conflitos."
+            />
           ) : null}
-
-          <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-black/5">
-            <Button variant="ghost" type="button" onClick={() => setModalAberto(false)}>
+          <div className="flex justify-end gap-2 border-t border-black/[0.06] pt-4">
+            <Button type="button" variant="ghost" onClick={fecharNovo}>
               Cancelar
             </Button>
             <Button type="submit" disabled={criar.isPending}>
-              {criar.isPending ? 'Confirmando…' : 'Agendar consulta'}
+              {criar.isPending ? 'Agendando…' : 'Agendar'}
             </Button>
           </div>
         </form>
+      </Modal>
+
+      <Modal
+        titulo="Reagendar"
+        descricao={
+          reagendando
+            ? `${nomePaciente(reagendando.pacienteId)} — ${nomeProcedimento(reagendando.procedimentoId)}`
+            : undefined
+        }
+        aberto={reagendando !== undefined}
+        onClose={fecharReagendamento}
+      >
+        <form
+          className="space-y-4"
+          onSubmit={(evento) => {
+            evento.preventDefault();
+            reagendar.mutate(
+              { inicio: new Date(novoInicio).toISOString() },
+              {
+                onSuccess: () => {
+                  toast.mostrar('Agendamento reagendado.');
+                  fecharReagendamento();
+                },
+              }
+            );
+          }}
+        >
+          <Field label="Novo início">
+            <Input
+              data-autofocus
+              type="datetime-local"
+              value={novoInicio}
+              onChange={(evento) => setNovoInicio(evento.target.value)}
+              required
+            />
+          </Field>
+          {reagendar.isError ? (
+            <ErrorState
+              mensagem="Não foi possível reagendar."
+              detalhe="Confira se o novo horário está livre."
+            />
+          ) : null}
+          <div className="flex justify-end gap-2 border-t border-black/[0.06] pt-4">
+            <Button type="button" variant="ghost" onClick={fecharReagendamento}>
+              Voltar
+            </Button>
+            <Button type="submit" disabled={reagendar.isPending}>
+              {reagendar.isPending ? 'Salvando…' : 'Confirmar novo horário'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal
+        titulo="Cancelar agendamento"
+        descricao={
+          cancelando
+            ? `${nomePaciente(cancelando.pacienteId)} — ${formatarHorario(cancelando.inicio)}`
+            : undefined
+        }
+        aberto={cancelando !== undefined}
+        onClose={() => setCancelando(undefined)}
+      >
+        <p className="text-sm leading-relaxed text-ink-700">
+          O horário permanecerá no histórico com status cancelado. Esta ação não exclui dados.
+        </p>
+        {cancelar.isError ? (
+          <div className="mt-4">
+            <ErrorState mensagem="Não foi possível cancelar o agendamento." />
+          </div>
+        ) : null}
+        <div className="mt-5 flex justify-end gap-2 border-t border-black/[0.06] pt-4">
+          <Button type="button" variant="ghost" onClick={() => setCancelando(undefined)}>
+            Manter agendamento
+          </Button>
+          <Button
+            data-autofocus
+            type="button"
+            variant="danger"
+            disabled={cancelar.isPending}
+            onClick={() => {
+              if (!cancelando) return;
+              cancelar.mutate(cancelando.id, {
+                onSuccess: () => {
+                  toast.mostrar('Agendamento cancelado.');
+                  setCancelando(undefined);
+                },
+              });
+            }}
+          >
+            {cancelar.isPending ? 'Cancelando…' : 'Confirmar cancelamento'}
+          </Button>
+        </div>
       </Modal>
     </section>
   );

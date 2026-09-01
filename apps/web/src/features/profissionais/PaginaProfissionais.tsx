@@ -1,175 +1,193 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { ProfissionalResponse } from '@odontosys/contracts';
 import { useState, type ReactElement } from 'react';
 
-import { api } from '../../shared/api/client';
 import {
   Badge,
   Button,
   EmptyState,
   ErrorState,
+  Field,
   Input,
+  MobileCard,
   Modal,
   PageHeader,
   Spinner,
   Table,
+  useToast,
 } from '../../shared/ui';
+import { useProfissionais, useSalvarProfissional } from './api';
 
-type Item = { id: string; nome: string; cro: string; especialidade: string; usuarioId: string };
+type Formulario = { nome: string; cro: string; especialidade: string; usuarioId: string };
+const vazio: Formulario = { nome: '', cro: '', especialidade: '', usuarioId: '' };
 
 export function PaginaProfissionais(): ReactElement {
-  const queryClient = useQueryClient();
+  const consulta = useProfissionais();
+  const toast = useToast();
   const [modalAberto, setModalAberto] = useState(false);
+  const [editando, setEditando] = useState<ProfissionalResponse>();
+  const [formulario, setFormulario] = useState<Formulario>(vazio);
+  const salvar = useSalvarProfissional(editando?.id);
 
-  const consulta = useQuery({
-    queryKey: ['profissionais'],
-    queryFn: () => api<{ dados: Item[] }>('/profissionais?pagina=1&tamanho=50'),
-  });
+  const abrir = (item?: ProfissionalResponse) => {
+    setEditando(item);
+    setFormulario(
+      item
+        ? {
+            nome: item.nome,
+            cro: item.cro,
+            especialidade: item.especialidade,
+            usuarioId: item.usuarioId,
+          }
+        : vazio
+    );
+    setModalAberto(true);
+  };
+  const fechar = () => {
+    setModalAberto(false);
+    setEditando(undefined);
+    setFormulario(vazio);
+    salvar.reset();
+  };
 
-  const [nome, setNome] = useState('');
-  const [cro, setCro] = useState('');
-  const [especialidade, setEspecialidade] = useState('');
-  const [usuarioId, setUsuarioId] = useState('');
-
-  const criar = useMutation({
-    mutationFn: () =>
-      api('/profissionais', {
-        method: 'POST',
-        body: JSON.stringify({ nome, cro, especialidade, usuarioId }),
-      }),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['profissionais'] });
-      setModalAberto(false);
-      setNome('');
-      setCro('');
-      setEspecialidade('');
-      setUsuarioId('');
-    },
-  });
-
-  if (consulta.isLoading) return <Spinner />;
-  if (consulta.isError)
-    return <ErrorState mensagem="Não foi possível carregar o cadastro de profissionais." />;
-
-  const dados = consulta.data?.dados ?? [];
-
-  return (
-    <section className="space-y-6">
-      <PageHeader
-        titulo="Profissionais"
-        subtitulo="Corpo clínico, dentistas e especialistas cadastrados"
-        acao={
-          <Button type="button" onClick={() => setModalAberto(true)}>
-            <svg className="h-4 w-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M12 4v16m8-8H4"
-              />
-            </svg>
-            Novo profissional
-          </Button>
-        }
+  if (consulta.isLoading) return <Spinner texto="Carregando profissionais…" />;
+  if (consulta.isError) {
+    return (
+      <ErrorState
+        mensagem="Não foi possível carregar os profissionais."
+        onRetry={() => void consulta.refetch()}
       />
+    );
+  }
 
-      {dados.length === 0 ? (
+  const profissionais = consulta.data?.dados ?? [];
+  return (
+    <section className="space-y-5">
+      <PageHeader
+        contexto="Equipe da clínica"
+        titulo="Profissionais"
+        subtitulo="Vínculos do corpo clínico, registro profissional e especialidade."
+        acao={<Button onClick={() => abrir()}>＋ Novo profissional</Button>}
+      />
+      {profissionais.length === 0 ? (
         <EmptyState
           mensagem="Nenhum profissional cadastrado"
-          subtitulo="Cadastre dentistas e especialistas para liberar a agenda da clínica."
+          subtitulo="Cadastre o corpo clínico antes de criar agendamentos."
           acao={
-            <Button variant="outline" size="sm" onClick={() => setModalAberto(true)}>
+            <Button variant="outline" onClick={() => abrir()}>
               Cadastrar profissional
             </Button>
           }
         />
       ) : (
-        <Table cabecalhos={['Profissional', 'CRO', 'Especialidade']}>
-          {dados.map((item) => (
-            <tr key={item.id} className="hover:bg-black/[0.015] transition-colors">
-              <td className="px-4 py-3.5">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-50 text-blue-700 text-xs font-semibold border border-blue-100">
-                    {item.nome.charAt(0).toUpperCase()}
-                  </div>
-                  <span className="font-semibold text-ink-900">{item.nome}</span>
-                </div>
-              </td>
+        <Table
+          cabecalhos={['Profissional', 'CRO', 'Especialidade', 'Ações']}
+          mobile={profissionais.map((item) => (
+            <MobileCard key={item.id} titulo={item.nome} meta={`CRO ${item.cro}`}>
+              <div className="flex items-center justify-between gap-3">
+                <Badge variant="info">{item.especialidade}</Badge>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => abrir(item)}
+                  aria-label={`Editar ${item.nome}`}
+                >
+                  Editar
+                </Button>
+              </div>
+            </MobileCard>
+          ))}
+        >
+          {profissionais.map((item) => (
+            <tr key={item.id} className="hover:bg-brand-50/35">
+              <td className="px-4 py-3.5 font-semibold text-ink-900">{item.nome}</td>
               <td className="px-4 py-3.5 font-mono text-xs text-ink-700">CRO {item.cro}</td>
               <td className="px-4 py-3.5">
                 <Badge variant="info">{item.especialidade}</Badge>
+              </td>
+              <td className="px-4 py-3.5">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => abrir(item)}
+                  aria-label={`Editar ${item.nome}`}
+                >
+                  Editar
+                </Button>
               </td>
             </tr>
           ))}
         </Table>
       )}
 
-      {/* Modal Novo Profissional */}
       <Modal
-        titulo="Novo Profissional"
-        descricao="Preencha os dados do dentista ou especialista"
+        titulo={editando ? 'Editar profissional' : 'Novo profissional'}
+        descricao="Associe o cadastro clínico ao usuário de acesso correspondente."
         aberto={modalAberto}
-        onClose={() => setModalAberto(false)}
+        onClose={fechar}
       >
         <form
-          className="space-y-4 pt-2"
+          className="space-y-4"
           onSubmit={(evento) => {
             evento.preventDefault();
-            criar.mutate();
+            salvar.mutate(formulario, {
+              onSuccess: () => {
+                toast.mostrar(editando ? 'Profissional atualizado.' : 'Profissional cadastrado.');
+                fechar();
+              },
+            });
           }}
         >
-          <div className="space-y-1.5">
-            <label className="block text-xs font-semibold text-ink-700">Nome completo</label>
+          <Field label="Nome completo">
             <Input
-              placeholder="Ex: Dr. Carlos Mendes"
-              value={nome}
-              onChange={(e) => setNome(e.target.value)}
+              data-autofocus
+              value={formulario.nome}
+              onChange={(evento) =>
+                setFormulario((atual) => ({ ...atual, nome: evento.target.value }))
+              }
               required
             />
-          </div>
-
+          </Field>
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <label className="block text-xs font-semibold text-ink-700">Número do CRO</label>
+            <Field label="Número do CRO">
               <Input
-                placeholder="Ex: 12345"
-                value={cro}
-                onChange={(e) => setCro(e.target.value)}
+                value={formulario.cro}
+                onChange={(evento) =>
+                  setFormulario((atual) => ({ ...atual, cro: evento.target.value }))
+                }
                 required
               />
-            </div>
-            <div className="space-y-1.5">
-              <label className="block text-xs font-semibold text-ink-700">Especialidade</label>
+            </Field>
+            <Field label="Especialidade">
               <Input
-                placeholder="Ex: Ortodontia, Clínica Geral"
-                value={especialidade}
-                onChange={(e) => setEspecialidade(e.target.value)}
+                value={formulario.especialidade}
+                onChange={(evento) =>
+                  setFormulario((atual) => ({ ...atual, especialidade: evento.target.value }))
+                }
                 required
               />
-            </div>
+            </Field>
           </div>
-
-          <div className="space-y-1.5">
-            <label className="block text-xs font-semibold text-ink-700">
-              ID do Usuário de Sistema (UUID)
-            </label>
+          <Field label="ID do usuário vinculado" dica="UUID do usuário que acessa o sistema.">
             <Input
-              placeholder="UUID do usuário vinculado"
-              value={usuarioId}
-              onChange={(e) => setUsuarioId(e.target.value)}
+              value={formulario.usuarioId}
+              onChange={(evento) =>
+                setFormulario((atual) => ({ ...atual, usuarioId: evento.target.value }))
+              }
               required
             />
-          </div>
-
-          {criar.isError ? (
-            <ErrorState mensagem="Não foi possível cadastrar o profissional. Verifique os dados." />
+          </Field>
+          {salvar.isError ? (
+            <ErrorState
+              mensagem="Não foi possível salvar o profissional."
+              detalhe="Confira o UUID e os demais campos."
+            />
           ) : null}
-
-          <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-black/5">
-            <Button variant="ghost" type="button" onClick={() => setModalAberto(false)}>
+          <div className="flex justify-end gap-2 border-t border-black/[0.06] pt-4">
+            <Button type="button" variant="ghost" onClick={fechar}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={criar.isPending}>
-              {criar.isPending ? 'Salvando…' : 'Cadastrar profissional'}
+            <Button type="submit" disabled={salvar.isPending}>
+              {salvar.isPending ? 'Salvando…' : 'Salvar profissional'}
             </Button>
           </div>
         </form>
