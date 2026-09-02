@@ -77,7 +77,7 @@ export async function registrarRotasAuth(app: FastifyInstance): Promise<void> {
     '/auth/logout',
     {
       onRequest: [app.authenticate],
-      schema: schemaRota({ resposta: SchemaOk, autenticada: true, erros: [401, 500] }),
+      schema: schemaRota({ resposta: SchemaOk, autenticada: true, erros: [400, 401, 500] }),
     },
     async (_request, reply) => {
       reply.clearCookie('sessionId', {

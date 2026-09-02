@@ -14,22 +14,23 @@ import {
 
 aplicarDotEnv();
 
-const IDS = {
-  clinica: '11111111-1111-1111-1111-111111111111',
-  recepcao: '22222222-2222-2222-2222-222222222222',
-  dentista: '33333333-3333-3333-3333-333333333333',
-  admin: '44444444-4444-4444-4444-444444444444',
-  profissional1: '55555555-5555-5555-5555-555555555555',
-  profissional2: '66666666-6666-6666-6666-666666666666',
-  paciente1: '77777777-7777-7777-7777-777777777777',
-  paciente2: '88888888-8888-8888-8888-888888888888',
-  paciente3: '99999999-9999-9999-9999-999999999999',
-  procedimento1: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-  procedimento2: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
-  procedimento3: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
+export const IDS = {
+  clinica: '11111111-1111-4111-8111-111111111111',
+  recepcao: '22222222-2222-4222-8222-222222222222',
+  dentista: '33333333-3333-4333-8333-333333333333',
+  admin: '44444444-4444-4444-8444-444444444444',
+  profissional1: '55555555-5555-4555-8555-555555555555',
+  profissional2: '66666666-6666-4666-8666-666666666666',
+  paciente1: '77777777-7777-4777-8777-777777777777',
+  paciente2: '88888888-8888-4888-8888-888888888888',
+  paciente3: '99999999-9999-4999-8999-999999999999',
+  procedimento1: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  procedimento2: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+  procedimento3: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+  agendamento: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
 };
 
-const runSeed = async (): Promise<void> => {
+export const runSeed = async (): Promise<void> => {
   if (!process.env.DATABASE_URL) {
     throw new Error('DATABASE_URL não definida');
   }
@@ -172,7 +173,7 @@ const runSeed = async (): Promise<void> => {
   await database
     .insert(agendamento)
     .values({
-      id: 'dddddddd-dddd-dddd-dddd-dddddddddddd',
+      id: IDS.agendamento,
       clinicaId: IDS.clinica,
       pacienteId: IDS.paciente1,
       profissionalId: IDS.profissional1,
@@ -187,7 +188,9 @@ const runSeed = async (): Promise<void> => {
   await pool.end();
 };
 
-runSeed().catch((erro: unknown) => {
-  process.stderr.write(`${erro instanceof Error ? erro.message : 'erro'}\n`);
-  process.exit(1);
-});
+if (process.argv[1]?.includes('seed')) {
+  runSeed().catch((erro: unknown) => {
+    process.stderr.write(`${erro instanceof Error ? erro.message : 'erro'}\n`);
+    process.exit(1);
+  });
+}

@@ -26,12 +26,13 @@ export function PaginaLogin(): ReactElement {
       <div className="relative grid w-full max-w-4xl overflow-hidden rounded-[2rem] border border-white/70 bg-white/75 shadow-modal backdrop-blur-xl md:grid-cols-[0.85fr_1.15fr]">
         <aside className="relative hidden overflow-hidden bg-gradient-to-br from-brand-700 to-brand-500 p-10 text-white md:flex md:flex-col md:justify-between">
           <div>
-            <span className="grid h-12 w-12 place-items-center rounded-2xl bg-white/15 text-2xl ring-1 ring-white/20">
-              ◡
-            </span>
-            <p className="mt-6 text-xs font-bold uppercase tracking-[0.18em] text-white/70">
-              OdontoSys
-            </p>
+            <img
+              src="/logo.png"
+              alt="OdontoSys"
+              width="1287"
+              height="1033"
+              className="h-auto w-36 rounded-2xl bg-white/95 p-3 shadow-card"
+            />
             <h1 className="mt-2 text-3xl font-bold tracking-[-0.04em]">
               Gestão clínica com clareza.
             </h1>
@@ -44,9 +45,13 @@ export function PaginaLogin(): ReactElement {
 
         <Card className="rounded-none border-0 bg-transparent p-6 shadow-none sm:p-10">
           <div className="mb-7 md:hidden">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-700">
-              OdontoSys
-            </p>
+            <img
+              src="/logo.png"
+              alt="OdontoSys"
+              width="1287"
+              height="1033"
+              className="h-auto w-32"
+            />
           </div>
           <div className="mb-6">
             <h2 className="text-2xl font-bold tracking-[-0.035em] text-ink-900">

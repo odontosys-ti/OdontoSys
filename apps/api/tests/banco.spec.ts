@@ -15,12 +15,14 @@ describe('garantias do banco', () => {
   });
 
   it('mantém restrição de exclusão contra sobreposição', async () => {
-    const resultado = await db().execute<{ conname: string }>(sql`
-      select conname
+    const resultado = await db().execute<{ conname: string; definicao: string }>(sql`
+      select conname, pg_get_constraintdef(oid) as definicao
       from pg_constraint
       where conname = 'agendamento_sem_sobreposicao'
     `);
 
-    expect(resultado.rows).toEqual([{ conname: 'agendamento_sem_sobreposicao' }]);
+    expect(resultado.rows).toHaveLength(1);
+    expect(resultado.rows[0]?.conname).toBe('agendamento_sem_sobreposicao');
+    expect(resultado.rows[0]?.definicao).toMatch(/status <> 'CANCELADO'/);
   });
 });

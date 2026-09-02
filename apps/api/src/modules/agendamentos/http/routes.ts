@@ -1,5 +1,7 @@
 import {
   SchemaAtualizarAgendamento,
+  SchemaAtualizarStatusAgendamento,
+  SchemaAgendamentosDiaQuery,
   SchemaAgendamentoResponse,
   SchemaCriarAgendamento,
   SchemaIdParams,
@@ -16,6 +18,27 @@ import { ServicoAgendamentos, serializarAgendamento } from '../application/servi
 
 export async function registrarRotasAgendamentos(app: FastifyInstance): Promise<void> {
   const servico = new ServicoAgendamentos();
+
+  app.get(
+    '/agendamentos/dia',
+    {
+      onRequest: [app.authenticate],
+      schema: schemaRota({
+        querystring: SchemaAgendamentosDiaQuery,
+        resposta: SchemaListaAgendamentos,
+        autenticada: true,
+      }),
+    },
+    async (request) => {
+      const query = SchemaAgendamentosDiaQuery.parse(request.query);
+      const sessao = contexto(request);
+      const lista = await servico.listarDia(sessao.clinicaId, query.data, query.profissionalId);
+      return {
+        dados: lista.itens.map(serializarAgendamento),
+        paginacao: { pagina: 1, tamanho: 100, total: lista.total },
+      };
+    }
+  );
 
   app.get(
     '/agendamentos',
@@ -64,6 +87,7 @@ export async function registrarRotasAgendamentos(app: FastifyInstance): Promise<
         profissionalId: body.profissionalId,
         procedimentoId: body.procedimentoId,
         inicio: parseData(body.inicio, 'inicio'),
+        justificativaLiberacao: body.justificativaLiberacao,
       });
       return reply.status(201).send(serializarAgendamento(criado));
     }
@@ -89,6 +113,31 @@ export async function registrarRotasAgendamentos(app: FastifyInstance): Promise<
         sessao.usuarioId,
         params.id,
         parseData(body.inicio, 'inicio')
+      );
+      return serializarAgendamento(atualizado);
+    }
+  );
+
+  app.patch<{ Params: IdParams }>(
+    '/agendamentos/:id/status',
+    {
+      onRequest: [app.authenticate, exigirPapel('RECEPCAO', 'ADMIN')],
+      schema: schemaRota({
+        params: SchemaIdParams,
+        body: SchemaAtualizarStatusAgendamento,
+        resposta: SchemaAgendamentoResponse,
+        autenticada: true,
+      }),
+    },
+    async (request) => {
+      const params = SchemaIdParams.parse(request.params);
+      const body = SchemaAtualizarStatusAgendamento.parse(request.body);
+      const sessao = contexto(request);
+      const atualizado = await servico.atualizarStatus(
+        sessao.clinicaId,
+        sessao.usuarioId,
+        params.id,
+        body.status
       );
       return serializarAgendamento(atualizado);
     }

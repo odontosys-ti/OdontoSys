@@ -418,7 +418,7 @@ A Sprint 0 só é concluída quando todos os itens abaixo forem verdadeiros. Som
 pnpm install
 docker compose up -d
 pnpm db:migrate && pnpm db:seed
-pnpm dev            # API em :3333 e web em :5173
+pnpm dev            # ambiente local: API em :3333 e web em :5173
 
 pnpm test           # unitários, integração e componente
 pnpm lint           # ESLint + Prettier + typecheck

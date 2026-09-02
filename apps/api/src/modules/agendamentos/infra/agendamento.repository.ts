@@ -1,4 +1,4 @@
-import { and, count, eq, gte, lte, ne } from 'drizzle-orm';
+import { and, count, eq, gte, lt, ne } from 'drizzle-orm';
 
 import { registrarAuditoria } from '../../../platform/auditoria/service';
 import type { Tx } from '../../../platform/auditoria/service';
@@ -12,6 +12,7 @@ import {
   type AgendamentoNovo,
   type IAgendamentoRepository,
   type ListaPaginada,
+  type StatusAgendamento,
   intervalosSobrepostos,
   validarDuracao,
 } from '../domain/agendamento';
@@ -51,7 +52,7 @@ export class AgendamentoRepository implements IAgendamentoRepository {
   ): Promise<boolean> {
     const filtros = [
       eq(agendamento.profissionalId, profissionalId),
-      eq(agendamento.status, 'AGENDADO'),
+      ne(agendamento.status, 'CANCELADO'),
     ];
     if (ignorarId) {
       filtros.push(ne(agendamento.id, ignorarId));
@@ -76,7 +77,7 @@ export class AgendamentoRepository implements IAgendamentoRepository {
     const filtros = [
       eq(agendamento.clinicaId, clinicaId),
       gte(agendamento.inicio, de),
-      lte(agendamento.inicio, ate),
+      lt(agendamento.inicio, ate),
     ];
     if (profissionalId) {
       filtros.push(eq(agendamento.profissionalId, profissionalId));
@@ -158,6 +159,20 @@ export class AgendamentoRepository implements IAgendamentoRepository {
     return proc ? { duracaoMinutos: proc.duracaoMinutos } : null;
   }
 
+  async contarFaltas(clinicaId: string, pacienteId: string): Promise<number> {
+    const [resultado] = await db()
+      .select({ total: count() })
+      .from(agendamento)
+      .where(
+        and(
+          eq(agendamento.clinicaId, clinicaId),
+          eq(agendamento.pacienteId, pacienteId),
+          eq(agendamento.status, 'FALTOU')
+        )
+      );
+    return resultado?.total ?? 0;
+  }
+
   async criar(dados: AgendamentoNovo): Promise<Agendamento> {
     try {
       return await db().transaction(async (tx) => {
@@ -190,7 +205,14 @@ export class AgendamentoRepository implements IAgendamentoRepository {
           entidade: 'agendamento',
           entidadeId: linha.id,
           acao: 'CRIAR',
-          dadosDepois: { id: linha.id, inicio: paraIso(dados.inicio), fim: paraIso(dados.fim) },
+          dadosDepois: {
+            id: linha.id,
+            inicio: paraIso(dados.inicio),
+            fim: paraIso(dados.fim),
+            ...(dados.justificativaLiberacao
+              ? { justificativaLiberacao: dados.justificativaLiberacao }
+              : {}),
+          },
         });
         return mapear(linha);
       });
@@ -284,6 +306,38 @@ export class AgendamentoRepository implements IAgendamentoRepository {
         acao: 'EDITAR',
         dadosAntes: { status: existente.status },
         dadosDepois: { status: 'CANCELADO' },
+      });
+      return mapear(linha);
+    });
+  }
+
+  async atualizarStatus(
+    clinicaId: string,
+    usuarioId: string,
+    id: string,
+    status: StatusAgendamento
+  ): Promise<Agendamento | null> {
+    return db().transaction(async (tx) => {
+      const [existente] = await tx
+        .select()
+        .from(agendamento)
+        .where(and(eq(agendamento.id, id), eq(agendamento.clinicaId, clinicaId)))
+        .limit(1);
+      if (!existente) return null;
+      const [linha] = await tx
+        .update(agendamento)
+        .set({ status, atualizadoEm: new Date() })
+        .where(eq(agendamento.id, id))
+        .returning();
+      if (!linha) return null;
+      await registrarAuditoria(tx, {
+        clinicaId,
+        usuarioId,
+        entidade: 'agendamento',
+        entidadeId: id,
+        acao: 'EDITAR',
+        dadosAntes: { status: existente.status },
+        dadosDepois: { status },
       });
       return mapear(linha);
     });

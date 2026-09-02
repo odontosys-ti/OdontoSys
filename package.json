@@ -5,10 +5,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "up": "tsx scripts/system.ts up",
+    "dev": "tsx scripts/system.ts dev",
+    "production": "tsx scripts/system.ts production",
+    "prod": "pnpm run production",
     "down": "tsx scripts/system.ts down",
     "status": "tsx scripts/system.ts status",
-    "dev": "pnpm run up",
     "build": "pnpm -r run build",
     "lint": "eslint . --max-warnings=0 && prettier --check .",
     "format": "prettier --write .",

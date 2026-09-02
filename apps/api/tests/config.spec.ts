@@ -1,6 +1,10 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
-import { carregarEnv, duracaoEmSegundos } from '../src/platform/config';
+import { aplicarDotEnv, carregarEnv, duracaoEmSegundos } from '../src/platform/config';
 
 const base = {
   NODE_ENV: 'test',
@@ -24,5 +28,33 @@ describe('configuração', () => {
   it('não confia em proxy por padrão', () => {
     expect(carregarEnv(base).TRUST_PROXY).toBe(false);
     expect(carregarEnv({ ...base, TRUST_PROXY: 'true' }).TRUST_PROXY).toBe(true);
+  });
+
+  it('carrega .env sem sobrescrever variáveis existentes', () => {
+    const pastaAnterior = process.cwd();
+    const pasta = mkdtempSync(join(tmpdir(), 'odontosys-env-'));
+    process.env.ODONTOSYS_EXISTENTE = 'ambiente';
+    writeFileSync(
+      join(pasta, '.env'),
+      [
+        '',
+        '# comentário',
+        'LINHA_SEM_IGUAL',
+        'ODONTOSYS_NOVA=arquivo',
+        'ODONTOSYS_EXISTENTE=arquivo',
+      ].join('\n')
+    );
+
+    try {
+      process.chdir(pasta);
+      aplicarDotEnv();
+      expect(process.env.ODONTOSYS_NOVA).toBe('arquivo');
+      expect(process.env.ODONTOSYS_EXISTENTE).toBe('ambiente');
+    } finally {
+      process.chdir(pastaAnterior);
+      delete process.env.ODONTOSYS_NOVA;
+      delete process.env.ODONTOSYS_EXISTENTE;
+      rmSync(pasta, { recursive: true, force: true });
+    }
   });
 });

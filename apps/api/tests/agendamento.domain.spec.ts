@@ -2,6 +2,9 @@ import { AppError } from '../src/platform/erros';
 import {
   calcularFim,
   intervalosSobrepostos,
+  limitesDoDia,
+  validarBloqueioPorFaltas,
+  validarTransicaoStatus,
   validarDuracao,
   validarInicioFuturo,
 } from '../src/modules/agendamentos/domain/agendamento';
@@ -49,5 +52,24 @@ describe('domínio de agendamento', () => {
   it('rejeita duração não positiva ou fracionária', () => {
     expect(() => validarDuracao(0)).toThrow(AppError);
     expect(() => validarDuracao(1.5)).toThrow(AppError);
+  });
+
+  it('calcula os limites do dia e valida transições de status', () => {
+    const limites = limitesDoDia('2026-09-03');
+    expect(limites.de.toISOString()).toBe('2026-09-03T03:00:00.000Z');
+    expect(limites.ate.getTime() - limites.de.getTime()).toBe(24 * 60 * 60 * 1_000);
+    expect(() => validarTransicaoStatus('AGENDADO', 'CONFIRMADO')).not.toThrow();
+    expect(() => validarTransicaoStatus('CONFIRMADO', 'ATENDIDO')).not.toThrow();
+    expect(() => validarTransicaoStatus('ATENDIDO', 'FALTOU')).toThrow(AppError);
+  });
+
+  it('rejeita uma data de agenda que não existe', () => {
+    expect(() => limitesDoDia('2026-02-30')).toThrow(AppError);
+  });
+
+  it('bloqueia duas faltas sem justificativa e libera com justificativa', () => {
+    expect(() => validarBloqueioPorFaltas(1)).not.toThrow();
+    expect(() => validarBloqueioPorFaltas(2)).toThrow(AppError);
+    expect(() => validarBloqueioPorFaltas(2, 'Paciente regularizado')).not.toThrow();
   });
 });

@@ -1,22 +1,24 @@
 # OdontoSys — Sistema de Gestão para Clínicas Odontológicas
 
-> **SPRINT 0 CONGELADA.** A base está encerrada; novas alterações devem pertencer a um incremento planejado. Veja [o registro de congelamento](docs/sprint-0-congelada.md).
+> **SPRINT 0 CONGELADA.** A base está encerrada; esta branch entrega a Release 1 (US-01, US-02 e US-08). Veja [o registro de congelamento](docs/sprint-0-congelada.md) e [o relatório da Release 1](docs/release-1-entregue.md).
 
-Sprint 0: fundação (autenticação, cadastros, agendamento simples, auditoria, testes, UI Apple HIG e CI). As estórias US-01 a US-08 **não** estão neste código.
+Sprint 0: fundação (autenticação, cadastros, agendamento simples, auditoria, testes, UI Apple HIG e CI). Release 1: agenda diária, status operacionais e proteção contra faltas reincidentes.
 
 ---
 
 ## ⚡ Comandos Mestres (Tudo em Um)
 
-Você pode subir ou parar **todo o ecossistema** com **um único comando inteligente**:
+Você pode iniciar o ambiente local ou a versão compilada para túnel com um comando:
 
-| Comando                             | Ação                      | O que ele faz automaticamente                                                                                                                                                                                                                                                                                 |
-| ----------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`pnpm run up`** _(ou `pnpm dev`)_ | 🚀 **Rodar Tudo**         | 1. Cria `.env` se não existir.<br>2. Sobe containers Docker (`postgres-dev` e `postgres-test`).<br>3. Aguarda portas 5432/5433 responderem.<br>4. Executa migrações e seed idempotente.<br>5. Inicia API Fastify e Web React em paralelo.<br>6. Trata Ctrl+C com encerramento gracioso de todos os processos. |
-| **`pnpm down`**                     | 🛑 **Parar Tudo**         | Para e desliga containers Docker e libera todos os processos.                                                                                                                                                                                                                                                 |
-| **`pnpm status`**                   | 📊 **Verificar Saúde**    | Exibe o status em tempo real de cada serviço (Postgres Dev/Test, API e Web).                                                                                                                                                                                                                                  |
-| **`pnpm check`**                    | 🧪 **Validar Qualidade**  | Executa Linter, Prettier, TypeScript Strict, 29 Testes automatizados e Build.                                                                                                                                                                                                                                 |
-| **`pnpm check:fix`**                | ✨ **Formatar e Validar** | Auto-formata com Prettier e executa o `pnpm check`.                                                                                                                                                                                                                                                           |
+| Comando                  | Ação                      | O que ele faz automaticamente                                                                                                                 |
+| ------------------------ | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`bun run dev`**        | 🚀 **Desenvolvimento**    | Cria `.env` se necessário, sobe os bancos dev/test, aplica migrações, garante o seed demo e inicia API/Web em modo watch.                     |
+| **`bun run production`** | 🌐 **Produção local**     | Sobe apenas o banco dev, aplica migrações, gera o build, serve API/Web compilados em `:3333`/`:4173` e inicia o túnel Cloudflare configurado. |
+| **`bun run prod`**       | ↪️ **Atalho**             | Alcunha de `bun run production`.                                                                                                              |
+| **`pnpm down`**          | 🛑 **Parar bancos**       | Para e remove os containers Docker. Processos API/Web são encerrados com `Ctrl+C` no terminal em que foram iniciados.                         |
+| **`pnpm status`**        | 📊 **Verificar Saúde**    | Exibe o status em tempo real de cada serviço (Postgres Dev/Test, API e Web).                                                                  |
+| **`pnpm check`**         | 🧪 **Validar Qualidade**  | Executa Linter, Prettier, TypeScript Strict, testes automatizados e Build.                                                                    |
+| **`pnpm check:fix`**     | ✨ **Formatar e Validar** | Auto-formata com Prettier e executa o `pnpm check`.                                                                                           |
 
 ---
 
@@ -25,12 +27,18 @@ Você pode subir ou parar **todo o ecossistema** com **um único comando intelig
 ### 1. Para Rodar Tudo com 1 Comando:
 
 ```bash
-pnpm run up
+bun run dev
 ```
 
-_(ou `pnpm dev`)_
+_(ou `pnpm run dev`)_
 
-> **Nota sobre o pnpm:** Como a palavra `up` isolada é um atalho interno do pnpm para `pnpm update` (atualização de pacotes), utilize **`pnpm run up`** ou **`pnpm dev`** para rodar o comando mestre.
+Para preparar a versão compilada para um túnel local:
+
+```bash
+bun run production
+```
+
+O comando de produção local não executa seed e assume que o `.env` já existe com os dados demo previamente preparados. Ele obtém a credencial do túnel com `cloudflared tunnel token` e inicia automaticamente o túnel `odontosys` para `odontosys.devstank.com.br`. Configure `ODONTOSYS_PUBLIC_ORIGIN` e `ODONTOSYS_TUNNEL_ID` no `.env` quando necessário.
 
 ### 2. Para Parar Tudo com 1 Comando:
 
@@ -49,6 +57,7 @@ pnpm status
 ## 🌐 URLs de Acesso Local
 
 - **Aplicação Web (Apple HIG)**: [http://localhost:5173](http://localhost:5173)
+- **Aplicação Web compilada para túnel**: [http://localhost:4173](http://localhost:4173)
 - **API Fastify Backend**: [http://localhost:3333](http://localhost:3333)
 - **Documentação Swagger / OpenAPI**: [http://localhost:3333/docs](http://localhost:3333/docs)
 
@@ -82,6 +91,6 @@ A interface web (`apps/web`) utiliza o Design System próprio baseado no **Apple
 
 ---
 
-## 🚫 Fora desta base (Sprint 0)
+## 🚫 Fora desta entrega
 
-Agenda do dia, status `CONFIRMADO`/`FALTOU`/`ATENDIDO`, telefone/consentimento, mensageria (WhatsApp/SMS), rotinas cron/workers, relatórios e bloqueio de faltantes pertencem às estórias de incremento **US-01 a US-08**.
+Telefone/consentimento, mensageria (WhatsApp/SMS), rotinas cron/workers e relatórios permanecem fora desta Release 1 e pertencem aos próximos incrementos planejados.

@@ -18,7 +18,11 @@ Estes itens não bloqueiam o congelamento, mas merecem uma rodada própria quand
 - aumentar a margem de cobertura de branches da web, hoje protegida pelo limite mínimo de 70%;
 - avaliar a separação do bundle compartilhado da web, cujo build atual emite aviso acima de 500 kB;
 - reconciliar os nomes dos documentos acadêmicos finais com os caminhos citados no `CLAUDE.md`;
-- revisar com o grupo a fronteira entre a listagem simples por período/profissional da base e a futura visão diária da US-01;
+- revisar com o grupo a evolução da agenda diária entregue na US-01;
 - revisar textos, dados de demonstração e evidências finais antes da apresentação acadêmica.
 
 Este arquivo é deliberadamente visível pelo aviso no topo do `README.md`.
+
+## Incremento posterior
+
+A Release 1 foi implementada isoladamente na branch `release-1`, sem reabrir a base. Consulte o [relatório da entrega](release-1-entregue.md); a Sprint 0 continua congelada.
