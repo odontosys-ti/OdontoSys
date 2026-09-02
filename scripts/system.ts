@@ -1,5 +1,12 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { copyFileSync, existsSync, readFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  existsSync,
+  readFileSync,
+  readlinkSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { createConnection } from 'node:net';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -7,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT_DIR = process.cwd();
 const ENV_PATH = join(ROOT_DIR, '.env');
 const ENV_EXAMPLE_PATH = join(ROOT_DIR, '.env.example');
+const PID_PATH = join(ROOT_DIR, '.git', 'odontosys-system.pid');
 const TUNNEL_ID_PADRAO = '4f38cd9a-9c06-4fd0-8b5c-cbf3e33264f7';
 
 const cor = {
@@ -78,6 +86,58 @@ async function aguardarPorta(porta: number, tentativas = 30): Promise<boolean> {
 
 async function aguardar(milisegundos: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, milisegundos));
+}
+
+export function processoPertenceAoOdontoSys(
+  comando: string,
+  diretorio: string,
+  raiz: string
+): boolean {
+  return diretorio === raiz && comando.split('\0').includes('scripts/system.ts');
+}
+
+function removerPid(pid?: number): void {
+  if (!existsSync(PID_PATH)) return;
+  if (pid !== undefined && readFileSync(PID_PATH, 'utf8').trim() !== String(pid)) return;
+  unlinkSync(PID_PATH);
+}
+
+function registrarAmbienteAtual(): void {
+  writeFileSync(PID_PATH, `${process.pid}\n`, { encoding: 'utf8', mode: 0o600 });
+  process.once('exit', () => removerPid(process.pid));
+}
+
+async function encerrarAmbienteAnterior(): Promise<void> {
+  if (!existsSync(PID_PATH)) return;
+  const pid = Number(readFileSync(PID_PATH, 'utf8').trim());
+  if (!Number.isSafeInteger(pid) || pid <= 0 || pid === process.pid) {
+    removerPid();
+    return;
+  }
+
+  try {
+    const comando = readFileSync(`/proc/${pid}/cmdline`, 'utf8');
+    const diretorio = readlinkSync(`/proc/${pid}/cwd`);
+    if (!processoPertenceAoOdontoSys(comando, diretorio, ROOT_DIR)) {
+      removerPid();
+      return;
+    }
+    log('Encerrando ambiente OdontoSys anterior...');
+    process.kill(pid, 'SIGTERM');
+  } catch {
+    removerPid();
+    return;
+  }
+
+  for (let tentativa = 0; tentativa < 30; tentativa++) {
+    if (!(await testarPorta(3333)) && !(await testarPorta(5173)) && !(await testarPorta(4173))) {
+      removerPid();
+      sucesso('Ambiente anterior encerrado.');
+      return;
+    }
+    await aguardar(250);
+  }
+  throw new Error('O ambiente anterior não encerrou no tempo esperado.');
 }
 
 async function iniciarServico(
@@ -349,10 +409,12 @@ export function validarPortasLivres(
 async function comandoDev(): Promise<void> {
   garantirEnv('dev');
   carregarEnvLocal();
+  await encerrarAmbienteAnterior();
   validarPortasLivres('dev', {
     api: await testarPorta(3333),
     web: await testarPorta(5173),
   });
+  registrarAmbienteAtual();
   await prepararBanco({ testes: true, seed: true });
   log('Iniciando desenvolvimento...');
   await iniciarServicos([
@@ -374,10 +436,12 @@ async function comandoDev(): Promise<void> {
 async function comandoProduction(): Promise<void> {
   garantirEnv('production');
   carregarEnvLocal();
+  await encerrarAmbienteAnterior();
   validarPortasLivres('production', {
     api: await testarPorta(3333),
     web: await testarPorta(4173),
   });
+  registrarAmbienteAtual();
   const ambiente = ambienteProducao();
   await prepararBanco({ testes: false, seed: false });
 
