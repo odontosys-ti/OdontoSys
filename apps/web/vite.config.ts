@@ -3,11 +3,31 @@ import react from '@vitejs/plugin-react';
 import path from 'node:path';
 import { defineConfig } from 'vite';
 
+import { destinoHttps } from './https-redirect.ts';
+
 const origemPublica = process.env.ODONTOSYS_PUBLIC_ORIGIN ?? 'https://odontosys.devstank.com.br';
 const hostPublico = new URL(origemPublica).hostname;
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    {
+      name: 'odontosys-https-publico',
+      configurePreviewServer(server) {
+        server.middlewares.use((request, response, next) => {
+          const destino = destinoHttps(request.headers, request.url, hostPublico);
+          if (!destino) {
+            next();
+            return;
+          }
+          response.statusCode = 308;
+          response.setHeader('Location', destino);
+          response.end();
+        });
+      },
+    },
+  ],
   server: {
     host: '127.0.0.1',
     port: 5173,
