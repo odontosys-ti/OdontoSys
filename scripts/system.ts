@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { copyFileSync, existsSync, readFileSync } from 'node:fs';
 import { createConnection } from 'node:net';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const ROOT_DIR = process.cwd();
 const ENV_PATH = join(ROOT_DIR, '.env');
@@ -328,9 +329,30 @@ async function iniciarTunel(origem: string, processos: ChildProcess[]): Promise<
   }
 }
 
+export function validarPortasLivres(
+  modo: 'dev' | 'production',
+  portas: { api: boolean; web: boolean }
+): void {
+  if (portas.api) {
+    throw new Error(
+      `A API :3333 já está ativa. Encerre o ambiente atual antes de iniciar ${modo}.`
+    );
+  }
+  if (portas.web) {
+    const porta = modo === 'dev' ? 5173 : 4173;
+    throw new Error(
+      `A Web ${modo} :${porta} já está ativa. Encerre o processo anterior antes de reiniciar.`
+    );
+  }
+}
+
 async function comandoDev(): Promise<void> {
   garantirEnv('dev');
   carregarEnvLocal();
+  validarPortasLivres('dev', {
+    api: await testarPorta(3333),
+    web: await testarPorta(5173),
+  });
   await prepararBanco({ testes: true, seed: true });
   log('Iniciando desenvolvimento...');
   await iniciarServicos([
@@ -352,16 +374,10 @@ async function comandoDev(): Promise<void> {
 async function comandoProduction(): Promise<void> {
   garantirEnv('production');
   carregarEnvLocal();
-  if (await testarPorta(3333)) {
-    throw new Error(
-      'A API :3333 já está ativa. Encerre o ambiente dev antes de iniciar production.'
-    );
-  }
-  if (await testarPorta(4173)) {
-    throw new Error(
-      'A Web production :4173 já está ativa. Encerre o processo anterior antes de reiniciar.'
-    );
-  }
+  validarPortasLivres('production', {
+    api: await testarPorta(3333),
+    web: await testarPorta(4173),
+  });
   const ambiente = ambienteProducao();
   await prepararBanco({ testes: false, seed: false });
 
@@ -453,7 +469,9 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((cause: unknown) => {
-  erro(cause instanceof Error ? cause.message : 'Falha inesperada.');
-  process.exit(1);
-});
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  main().catch((cause: unknown) => {
+    erro(cause instanceof Error ? cause.message : 'Falha inesperada.');
+    process.exit(1);
+  });
+}
