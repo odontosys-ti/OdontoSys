@@ -85,8 +85,8 @@ describe('integração PostgreSQL de lembretes manuais', () => {
       .set({ telefone: '5511999998888', canalPreferido: 'WHATSAPP', consentimentoAtivo: true })
       .where(eq(paciente.id, ids.pacienteId));
 
-    let liberar!: () => void;
-    let iniciou!: () => void;
+    let liberar: () => void = () => undefined;
+    let iniciou: () => void = () => undefined;
     const transporteIniciado = new Promise<void>((resolve) => {
       iniciou = resolve;
     });
@@ -130,7 +130,7 @@ describe('integração PostgreSQL de lembretes manuais', () => {
       .set({ telefone: '5511999998888', canalPreferido: 'WHATSAPP', consentimentoAtivo: true })
       .where(eq(paciente.id, ids.pacienteId));
 
-    let iniciou!: () => void;
+    let iniciou: () => void = () => undefined;
     const transporteIniciado = new Promise<void>((resolve) => {
       iniciou = resolve;
     });

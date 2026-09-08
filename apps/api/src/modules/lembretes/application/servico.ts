@@ -4,6 +4,7 @@ import { AppError } from '../../../platform/erros';
 import { paraIso } from '../../../platform/http/datas';
 import {
   type ContextoEnvioLembrete,
+  type ContextoReenvioLembrete,
   type ILembreteRepository,
   type ITeletransporte,
   type Lembrete,
@@ -83,16 +84,30 @@ export class ServicoLembretes {
     };
   }
 
+  async tentarNovamente(clinicaId: string, usuarioId: string, lembreteId: string) {
+    const contexto = await this.repo.obterContextoReenvio(clinicaId, lembreteId);
+    if (!contexto) throw new AppError('NAO_ENCONTRADO');
+
+    const resultado = await this.processar(contexto, contexto.janela, usuarioId, contexto.canal);
+    if (resultado.tipo === 'EM_PROCESSAMENTO') {
+      throw new AppError('REGRA_NEGOCIO', [
+        { campo: 'lembrete', mensagem: 'O envio deste lembrete já está em processamento.' },
+      ]);
+    }
+    return resultado.lembrete;
+  }
+
   private async processar(
     contexto: ContextoEnvioLembrete,
     janela: 'MANUAL' | 'VINTE_E_QUATRO_HORAS' | 'QUARENTA_E_OITO_HORAS',
-    usuarioId: string
+    usuarioId: string,
+    canalOriginal?: ContextoReenvioLembrete['canal']
   ) {
-    validarElegibilidadeLembrete(contexto);
-    if (contexto.canalPreferido === null || contexto.telefone === null) {
+    const canalElegivel = canalOriginal ?? contexto.canalPreferido;
+    validarElegibilidadeLembrete({ ...contexto, canalPreferido: canalElegivel });
+    if (canalElegivel === null || contexto.telefone === null) {
       throw new AppError('REGRA_NEGOCIO');
     }
-    const canalElegivel = contexto.canalPreferido;
     const telefoneElegivel = contexto.telefone;
     const idempotenciaKey = chaveLogicaLembrete(contexto.agendamentoId, janela, canalElegivel);
     const reivindicacao = await this.repo.reivindicar({

@@ -18,6 +18,20 @@ function minutos(valor: string): number {
   return (partes[0] ?? 0) * 60 + (partes[1] ?? 0);
 }
 
+function horarioValido(valor: string): boolean {
+  const [horaTexto, minutoTexto] = valor.split(':');
+  const hora = Number(horaTexto);
+  const minuto = Number(minutoTexto);
+  return (
+    Number.isInteger(hora) &&
+    Number.isInteger(minuto) &&
+    hora >= 0 &&
+    hora <= 23 &&
+    minuto >= 0 &&
+    minuto <= 59
+  );
+}
+
 export function validarConfiguracaoAutomacao(valor: unknown): ConfiguracaoAutomacaoLembretes {
   const resultado = SchemaConfiguracaoAutomacaoLembretes.safeParse(valor);
   if (!resultado.success) {
@@ -25,7 +39,13 @@ export function validarConfiguracaoAutomacao(valor: unknown): ConfiguracaoAutoma
   }
   const inicio = minutos(resultado.data.inicioOperacional);
   const fim = minutos(resultado.data.fimOperacional);
-  if (inicio >= 24 * 60 || fim >= 24 * 60 || inicio >= fim) {
+  if (
+    !horarioValido(resultado.data.inicioOperacional) ||
+    !horarioValido(resultado.data.fimOperacional)
+  ) {
+    throw new Error('Configuração operacional de lembretes inválida');
+  }
+  if (inicio >= fim) {
     throw new Error('Configuração operacional de lembretes inválida');
   }
   return resultado.data;

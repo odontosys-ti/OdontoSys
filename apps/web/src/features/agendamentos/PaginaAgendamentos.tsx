@@ -30,6 +30,7 @@ import {
   useEnviarLembrete,
   usePendenciasLembretes,
   useReagendarAgendamento,
+  useRetryLembrete,
 } from './api';
 
 function formatarHorario(valor: string): string {
@@ -65,9 +66,11 @@ export function PaginaAgendamentos(): ReactElement {
   const cancelar = useCancelarAgendamento();
   const atualizarStatus = useAtualizarStatusAgendamento();
   const enviarLembrete = useEnviarLembrete();
+  const retryLembrete = useRetryLembrete();
   const toast = useToast();
   const podeEditar = papelPermite(sessao.data?.papel, ['RECEPCAO', 'ADMIN']);
-  const pendencias = usePendenciasLembretes(podeEditar);
+  const [paginaPendencias, setPaginaPendencias] = useState(1);
+  const pendencias = usePendenciasLembretes(paginaPendencias, podeEditar);
 
   const [modalNovo, setModalNovo] = useState(false);
   const [pacienteId, setPacienteId] = useState('');
@@ -151,6 +154,18 @@ export function PaginaAgendamentos(): ReactElement {
     });
   };
 
+  const tentarPendencia = (lembreteId: string) => {
+    retryLembrete.mutate(lembreteId, {
+      onSuccess: (lembrete) => {
+        toast.mostrar(
+          lembrete.status === 'FALHOU'
+            ? 'Lembrete pendente de nova tentativa.'
+            : 'Lembrete enviado.'
+        );
+      },
+    });
+  };
+
   const renderPendencias = () => {
     if (!podeEditar) return null;
     if (pendencias.isLoading) {
@@ -171,6 +186,10 @@ export function PaginaAgendamentos(): ReactElement {
       );
     }
     const itens = pendencias.data?.dados ?? [];
+    const paginacao = pendencias.data?.paginacao;
+    const totalPaginas = paginacao
+      ? Math.max(1, Math.ceil(paginacao.total / paginacao.tamanho))
+      : 1;
     if (itens.length === 0) {
       return (
         <Card className="p-4 sm:p-5">
@@ -204,8 +223,8 @@ export function PaginaAgendamentos(): ReactElement {
               <Button
                 variant="outline"
                 size="sm"
-                disabled={enviarLembrete.isPending}
-                onClick={() => solicitarLembrete(item.agendamentoId)}
+                disabled={retryLembrete.isPending}
+                onClick={() => tentarPendencia(item.id)}
               >
                 Tentar envio novamente para esta pendência
               </Button>
@@ -226,8 +245,8 @@ export function PaginaAgendamentos(): ReactElement {
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={enviarLembrete.isPending}
-                  onClick={() => solicitarLembrete(item.agendamentoId)}
+                  disabled={retryLembrete.isPending}
+                  onClick={() => tentarPendencia(item.id)}
                 >
                   Tentar envio novamente
                 </Button>
@@ -235,6 +254,32 @@ export function PaginaAgendamentos(): ReactElement {
             </tr>
           ))}
         </Table>
+        {paginacao && paginacao.total > 0 ? (
+          <nav
+            className="flex items-center justify-between gap-3"
+            aria-label="Paginação de pendências"
+          >
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={paginaPendencias <= 1 || pendencias.isFetching}
+              onClick={() => setPaginaPendencias((pagina) => Math.max(1, pagina - 1))}
+            >
+              Página anterior
+            </Button>
+            <span className="text-xs text-ink-600">
+              Página {paginacao.pagina} de {totalPaginas}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={paginacao.pagina >= totalPaginas || pendencias.isFetching}
+              onClick={() => setPaginaPendencias((pagina) => pagina + 1)}
+            >
+              Próxima página
+            </Button>
+          </nav>
+        ) : null}
       </section>
     );
   };
@@ -377,6 +422,16 @@ export function PaginaAgendamentos(): ReactElement {
           detalhe={
             enviarLembrete.error instanceof ApiError
               ? enviarLembrete.error.message
+              : 'Tente novamente em instantes.'
+          }
+        />
+      ) : null}
+      {retryLembrete.isError ? (
+        <ErrorState
+          mensagem="Não foi possível repetir o envio do lembrete."
+          detalhe={
+            retryLembrete.error instanceof ApiError
+              ? retryLembrete.error.message
               : 'Tente novamente em instantes.'
           }
         />

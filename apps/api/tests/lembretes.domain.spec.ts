@@ -8,6 +8,7 @@ import {
 
 import {
   type ContextoEnvioLembrete,
+  type ContextoReenvioLembrete,
   type EntradaReivindicacaoLembrete,
   type ILembreteRepository,
   type Lembrete,
@@ -218,6 +219,16 @@ class RepositorioEmMemoria implements ILembreteRepository {
 
   async obterContextoEnvio(): Promise<ContextoEnvioLembrete> {
     return this.contexto;
+  }
+
+  async obterContextoReenvio(): Promise<ContextoReenvioLembrete | null> {
+    if (!this.lembrete) return null;
+    return {
+      ...this.contexto,
+      lembreteId: this.lembrete.id,
+      janela: this.lembrete.janela,
+      canal: this.lembrete.canal,
+    };
   }
 
   async reivindicar(entrada: EntradaReivindicacaoLembrete): Promise<ReivindicacaoLembrete> {

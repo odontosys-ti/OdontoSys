@@ -266,6 +266,8 @@ export const SchemaListaAgendamentos = schemaLista(SchemaAgendamentoResponse);
 
 export const SchemaSolicitarLembreteManual = z.object({}).optional();
 export type SolicitarLembreteManualRequest = z.infer<typeof SchemaSolicitarLembreteManual>;
+export const SchemaSolicitarLembreteRetry = z.object({}).optional();
+export type SolicitarLembreteRetryRequest = z.infer<typeof SchemaSolicitarLembreteRetry>;
 
 export const SchemaLembreteResponse = z.object({
   id: z.string().uuid(),

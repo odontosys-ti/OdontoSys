@@ -859,6 +859,43 @@ describe('API HTTP', () => {
     expect(negadoEnvio.statusCode).toBe(403);
   });
 
+  it('repete pendência automática pelo registro persistido sem criar lembrete manual', async () => {
+    const recepcao = await login(app, 'recepcao@teste.local');
+    const ids = await obterIds();
+    await habilitarContato(app, ids.pacienteId, recepcao);
+    const criado = await criarAgendamento(app, recepcao, ids.pacienteId, ids.profissionalId);
+    const agendamentoId = criado.json().id as string;
+    const repo = new LembreteRepository();
+    const contexto = await repo.obterContextoEnvio(ids.clinicaId, agendamentoId);
+    if (!contexto) throw new Error('contexto de teste ausente');
+
+    const primeira = await new ServicoLembretes(
+      repo,
+      new SimuladorTransporte(true)
+    ).enviarAutomatico({ ...contexto, solicitadoPor: ids.recepcaoId }, 'VINTE_E_QUATRO_HORAS');
+    expect(primeira.tipo).toBe('FALHOU');
+
+    const segunda = await app.inject({
+      method: 'POST',
+      url: `/api/v1/lembretes/${primeira.lembrete.id}/retry`,
+      cookies: { sessionId: recepcao },
+    });
+
+    expect(segunda.statusCode).toBe(200);
+    expect(SchemaLembreteResponse.parse(segunda.json())).toMatchObject({
+      id: primeira.lembrete.id,
+      agendamentoId,
+      janela: 'VINTE_E_QUATRO_HORAS',
+      status: 'ENVIADO',
+    });
+    const registros = await db()
+      .select()
+      .from(lembrete)
+      .where(eq(lembrete.agendamentoId, agendamentoId));
+    expect(registros).toHaveLength(1);
+    expect(registros[0]?.janela).toBe('VINTE_E_QUATRO_HORAS');
+  });
+
   it('rejeita envio sem consentimento, agendamento cancelado e outra clínica', async () => {
     const recepcao = await login(app, 'recepcao@teste.local');
     const ids = await obterIds();

@@ -106,10 +106,23 @@ export function useEnviarLembrete() {
   });
 }
 
-export function usePendenciasLembretes(enabled = true) {
-  const params = new URLSearchParams({ pagina: '1', tamanho: '50' });
+export function useRetryLembrete() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (lembreteId: string) =>
+      api(`/lembretes/${lembreteId}/retry`, SchemaLembreteResponse, {
+        method: 'POST',
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['lembretes-pendencias'] });
+    },
+  });
+}
+
+export function usePendenciasLembretes(pagina = 1, enabled = true) {
+  const params = new URLSearchParams({ pagina: String(pagina), tamanho: '10' });
   return useQuery({
-    queryKey: ['lembretes-pendencias'],
+    queryKey: ['lembretes-pendencias', pagina],
     enabled,
     queryFn: () => api(`/lembretes/pendencias?${params.toString()}`, SchemaListaLembretes),
   });

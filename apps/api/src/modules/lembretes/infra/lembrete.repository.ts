@@ -8,6 +8,7 @@ import {
   sanitizarResultadoTransporte,
   type ContextoAutomaticoLembrete,
   type ContextoEnvioLembrete,
+  type ContextoReenvioLembrete,
   type EntradaReivindicacaoLembrete,
   type ILembreteRepository,
   type ILembreteAutomaticoRepository,
@@ -63,6 +64,35 @@ export class LembreteRepository implements ILembreteRepository, ILembreteAutomat
       .innerJoin(paciente, eq(paciente.id, agendamento.pacienteId))
       .innerJoin(clinica, eq(clinica.id, agendamento.clinicaId))
       .where(and(eq(agendamento.id, agendamentoId), eq(agendamento.clinicaId, clinicaId)))
+      .limit(1);
+    return linhas[0] ?? null;
+  }
+
+  async obterContextoReenvio(
+    clinicaId: string,
+    lembreteId: string
+  ): Promise<ContextoReenvioLembrete | null> {
+    const linhas = await db()
+      .select({
+        lembreteId: lembrete.id,
+        janela: lembrete.janela,
+        canal: lembrete.canal,
+        agendamentoId: agendamento.id,
+        clinicaId: agendamento.clinicaId,
+        pacienteId: paciente.id,
+        inicio: agendamento.inicio,
+        statusAgendamento: agendamento.status,
+        fusoHorario: clinica.fusoHorario,
+        nomePaciente: paciente.nome,
+        telefone: paciente.telefone,
+        canalPreferido: paciente.canalPreferido,
+        consentimentoAtivo: paciente.consentimentoAtivo,
+      })
+      .from(lembrete)
+      .innerJoin(agendamento, eq(agendamento.id, lembrete.agendamentoId))
+      .innerJoin(paciente, eq(paciente.id, agendamento.pacienteId))
+      .innerJoin(clinica, eq(clinica.id, agendamento.clinicaId))
+      .where(and(eq(lembrete.id, lembreteId), eq(lembrete.clinicaId, clinicaId)))
       .limit(1);
     return linhas[0] ?? null;
   }

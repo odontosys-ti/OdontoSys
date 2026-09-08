@@ -7,6 +7,7 @@ import {
 } from '../src/modules/lembretes/domain/automatico';
 import { ServicoLembretesAutomaticos } from '../src/modules/lembretes/application/automatico';
 import { ServicoConfiguracaoLembretes } from '../src/modules/lembretes/application/configuracao';
+import { validarConfiguracaoAutomacao } from '../src/modules/lembretes/domain/configuracao';
 import { LembreteRepository } from '../src/modules/lembretes/infra/lembrete.repository';
 import { ConfiguracaoClinicaRepository } from '../src/modules/lembretes/infra/configuracao.repository';
 import { SimuladorTransporte } from '../src/modules/lembretes/infra/transportes';
@@ -43,6 +44,15 @@ function contexto(
 }
 
 describe('seleção de lembretes automáticos', () => {
+  it.each(['08:99', '24:00', '08:60'])('rejeita horário operacional inválido %s', (horario) => {
+    expect(() =>
+      validarConfiguracaoAutomacao({
+        ...configuracao,
+        inicioOperacional: horario,
+      })
+    ).toThrow('Configuração operacional de lembretes inválida');
+  });
+
   it('seleciona as janelas de 24H e 48H somente no horário local da clínica', () => {
     const agora = new Date('2026-09-10T11:00:00.000Z');
     const resultado = selecionarContextosAutomaticos(
@@ -115,6 +125,33 @@ describe('seleção de lembretes automáticos', () => {
 });
 
 describe('execução automática de lembretes', () => {
+  it('continua a passada quando uma clínica possui configuração inválida', async () => {
+    const repo = new RepositorioAutomaticoEmMemoria([
+      contexto('2026-09-11T11:00:00.000Z', { clinicaId: 'clinica-invalida' }),
+      contexto('2026-09-11T11:00:00.000Z', {
+        clinicaId: 'clinica-valida',
+        agendamentoId: criarUuidV7(),
+      }),
+    ]);
+    const transporte = new SimuladorTransporte();
+    const fonteConfiguracao = {
+      async obterParaClinica(clinicaId: string) {
+        if (clinicaId === 'clinica-invalida') throw new Error('detalhe bruto não deve sair');
+        return configuracao;
+      },
+    };
+
+    const resumo = await new ServicoLembretesAutomaticos(
+      repo,
+      transporte,
+      fonteConfiguracao
+    ).executar(new Date('2026-09-10T11:00:00.000Z'));
+
+    expect(resumo.enviados).toBe(1);
+    expect(resumo.falhas).toBe(1);
+    expect(JSON.stringify(resumo)).not.toContain('detalhe bruto');
+  });
+
   it('é idempotente em reexecução e concorrência e produz resumo sem PII', async () => {
     const contextoElegivel = contexto('2026-09-11T11:00:00.000Z');
     let chamadas = 0;
@@ -343,10 +380,14 @@ class RepositorioAutomaticoEmMemoria {
     emProcessamento: boolean;
   } | null = null;
 
-  constructor(private readonly contextoElegivel: ContextoAutomaticoLembrete) {}
+  constructor(
+    private readonly contextosElegiveis: ContextoAutomaticoLembrete | ContextoAutomaticoLembrete[]
+  ) {}
 
   async listarContextosAutomaticos() {
-    return [this.contextoElegivel];
+    return Array.isArray(this.contextosElegiveis)
+      ? this.contextosElegiveis
+      : [this.contextosElegiveis];
   }
 
   async reivindicar() {

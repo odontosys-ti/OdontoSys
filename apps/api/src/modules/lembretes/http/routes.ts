@@ -4,6 +4,7 @@ import {
   SchemaListaLembretes,
   SchemaListarPendenciasQuery,
   SchemaSolicitarLembreteManual,
+  SchemaSolicitarLembreteRetry,
   type IdParams,
 } from '@odontosys/contracts';
 import type { FastifyInstance } from 'fastify';
@@ -31,6 +32,25 @@ export async function registrarRotasLembretes(app: FastifyInstance): Promise<voi
       SchemaSolicitarLembreteManual.parse(request.body ?? {});
       const sessao = contexto(request);
       const lembrete = await servico.solicitarManual(sessao.clinicaId, sessao.usuarioId, params.id);
+      return serializarLembrete(lembrete);
+    }
+  );
+
+  app.post<{ Params: IdParams }>(
+    '/lembretes/:id/retry',
+    {
+      onRequest: [app.authenticate, exigirPapel('RECEPCAO', 'ADMIN')],
+      schema: schemaRota({
+        params: SchemaIdParams,
+        resposta: SchemaLembreteResponse,
+        autenticada: true,
+      }),
+    },
+    async (request) => {
+      const params = SchemaIdParams.parse(request.params);
+      SchemaSolicitarLembreteRetry.parse(request.body ?? {});
+      const sessao = contexto(request);
+      const lembrete = await servico.tentarNovamente(sessao.clinicaId, sessao.usuarioId, params.id);
       return serializarLembrete(lembrete);
     }
   );

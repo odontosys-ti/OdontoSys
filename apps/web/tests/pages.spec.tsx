@@ -266,7 +266,7 @@ describe('páginas da base', () => {
   });
 
   it('mostra carregamento e vazio da agenda persistente de pendências', async () => {
-    let liberar!: () => void;
+    let liberar: () => void = () => undefined;
     const pendenciasCarregando = new Promise<Response>((resolve) => {
       liberar = () =>
         resolve(new Response(JSON.stringify({ dados: [], paginacao }), { status: 200 }));
@@ -340,9 +340,45 @@ describe('páginas da base', () => {
     fireEvent.click(
       await screen.findByRole('button', { name: 'Tentar envio novamente para esta pendência' })
     );
+    await waitFor(() =>
+      expect(requisicao).toHaveBeenCalledWith(
+        expect.stringContaining(`/lembretes/${pendencia.id}/retry`),
+        expect.objectContaining({ method: 'POST' })
+      )
+    );
     expect(await screen.findByText('Lembrete enviado.')).toBeInTheDocument();
     await waitFor(() => expect(envios).toBe(1));
     expect(await screen.findByText('Nenhuma pendência de lembrete')).toBeInTheDocument();
+  });
+
+  it('solicita e renderiza a segunda página de pendências', async () => {
+    const paginaDois = {
+      ...pendencia,
+      id: '01900000-0000-7000-8000-000000000006',
+      janela: 'QUARENTA_E_OITO_HORAS' as const,
+    };
+    const requisicao = vi.fn((entrada: string | URL | Request, init?: RequestInit) => {
+      const url = String(entrada);
+      if (url.includes('/lembretes/pendencias')) {
+        const pagina = new URL(url).searchParams.get('pagina');
+        return resposta({
+          dados: [pagina === '2' ? paginaDois : pendencia],
+          paginacao: { pagina: Number(pagina ?? 1), tamanho: 1, total: 2 },
+        });
+      }
+      return fetchRecursos(entrada, init);
+    });
+    vi.stubGlobal('fetch', requisicao);
+    renderizar(<PaginaAgendamentos />, 'RECEPCAO');
+
+    expect(await screen.findByText('MANUAL')).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Próxima página' }));
+
+    expect(await screen.findByText('QUARENTA_E_OITO_HORAS')).toBeInTheDocument();
+    expect(requisicao).toHaveBeenCalledWith(
+      expect.stringContaining('/lembretes/pendencias?pagina=2'),
+      expect.anything()
+    );
   });
 
   it('informa falha no envio manual de lembrete', async () => {

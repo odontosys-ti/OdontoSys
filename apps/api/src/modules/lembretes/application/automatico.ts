@@ -41,21 +41,27 @@ export class ServicoLembretesAutomaticos {
       agrupamento.push(contexto);
       porClinica.set(contexto.clinicaId, agrupamento);
     }
+    let falhasDeConfiguracao = 0;
     const selecionados = (
       await Promise.all(
-        [...porClinica.entries()].map(async ([clinicaId, itens]) =>
-          selecionarContextosAutomaticos(
-            itens,
-            agora,
-            await this.fonteConfiguracao.obterParaClinica(clinicaId)
-          )
-        )
+        [...porClinica.entries()].map(async ([clinicaId, itens]) => {
+          try {
+            return selecionarContextosAutomaticos(
+              itens,
+              agora,
+              await this.fonteConfiguracao.obterParaClinica(clinicaId)
+            );
+          } catch {
+            falhasDeConfiguracao += 1;
+            return [];
+          }
+        })
       )
     ).flat();
     const resumo: ResumoAutomacaoLembretes = {
       selecionados: selecionados.length,
       enviados: 0,
-      falhas: 0,
+      falhas: falhasDeConfiguracao,
       duplicados: 0,
     };
 

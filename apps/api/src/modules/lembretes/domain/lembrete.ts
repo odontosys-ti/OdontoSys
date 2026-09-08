@@ -44,6 +44,12 @@ export type ContextoAutomaticoLembrete = ContextoEnvioLembrete & {
   solicitadoPor: string;
 };
 
+export type ContextoReenvioLembrete = ContextoEnvioLembrete & {
+  lembreteId: string;
+  janela: JanelaLembrete;
+  canal: CanalMensagem;
+};
+
 export type ResultadoTransporte = {
   status: StatusLembrete;
   providerId: string | null;
@@ -100,6 +106,10 @@ export interface ILembreteRepository {
     clinicaId: string,
     agendamentoId: string
   ): Promise<ContextoEnvioLembrete | null>;
+  obterContextoReenvio(
+    clinicaId: string,
+    lembreteId: string
+  ): Promise<ContextoReenvioLembrete | null>;
   reivindicar(entrada: EntradaReivindicacaoLembrete): Promise<ReivindicacaoLembrete>;
   renovarClaim(entrada: {
     lembreteId: string;
