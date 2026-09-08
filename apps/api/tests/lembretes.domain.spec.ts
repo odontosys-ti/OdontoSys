@@ -8,14 +8,17 @@ import {
 
 import {
   type ContextoEnvioLembrete,
+  type EntradaReivindicacaoLembrete,
   type ILembreteRepository,
   type Lembrete,
   type ListaLembretes,
   type ResultadoPersistenciaLembrete,
+  type ReivindicacaoLembrete,
   montarMensagemLembrete,
+  sanitizarResultadoTransporte,
   validarElegibilidadeLembrete,
 } from '../src/modules/lembretes/domain/lembrete';
-import { ServicoLembretes } from '../src/modules/lembretes/application/servico';
+import { serializarLembrete, ServicoLembretes } from '../src/modules/lembretes/application/servico';
 import { SimuladorTransporte } from '../src/modules/lembretes/infra/transportes';
 
 describe('domínio de lembretes', () => {
@@ -67,7 +70,7 @@ describe('domínio de lembretes', () => {
   it('simulador retorna resultado determinístico', async () => {
     const transporte = new SimuladorTransporte();
     const entrada = {
-      chaveLogica: 'agendamento-1:MANUAL:WHATSAPP',
+      idempotenciaKey: 'agendamento-1:MANUAL:WHATSAPP',
       telefone: '5511999998888',
       mensagem: 'Lembrete de consulta.',
       canal: 'WHATSAPP' as CanalMensagem,
@@ -80,6 +83,52 @@ describe('domínio de lembretes', () => {
       mensagemFalha: null,
     });
     await expect(transporte.enviar(entrada)).resolves.toEqual(await transporte.enviar(entrada));
+  });
+
+  it('normaliza código e mensagem de falha antes de expor o resultado', () => {
+    expect(
+      sanitizarResultadoTransporte({
+        status: 'FALHOU',
+        providerId: 'provider-secret',
+        codigoFalha: 'RESPOSTA_BRUTA_DO_PROVIDER',
+        mensagemFalha: 'token=secret; stack trace; telefone=5511999998888',
+      })
+    ).toEqual({
+      status: 'FALHOU',
+      providerId: null,
+      codigoFalha: 'FALHA_DESCONHECIDA',
+      mensagemFalha: 'Não foi possível concluir o envio do lembrete.',
+    });
+  });
+
+  it('serializa falha legada sem expor texto arbitrário', () => {
+    const resposta = serializarLembrete({
+      id: 'lembrete-1',
+      clinicaId: 'clinica-1',
+      agendamentoId: 'agendamento-1',
+      pacienteId: 'paciente-1',
+      canal: 'WHATSAPP',
+      janela: 'MANUAL',
+      status: 'FALHOU',
+      transporte: 'whatsapp',
+      providerId: 'secret-provider-id',
+      codigoFalha: 'RAW_PROVIDER_ERROR',
+      mensagemFalha: 'Authorization: Bearer secret-token',
+      emProcessamento: false,
+      claimToken: null,
+      claimExpiraEm: null,
+      solicitadoPor: 'usuario-1',
+      criadoEm: new Date('2026-09-03T10:00:00.000Z'),
+      atualizadoEm: new Date('2026-09-03T10:00:00.000Z'),
+    });
+
+    expect(resposta).toMatchObject({
+      status: 'FALHOU',
+      providerId: null,
+      codigoFalha: 'FALHA_DESCONHECIDA',
+      mensagemFalha: 'Não foi possível concluir o envio do lembrete.',
+    });
+    expect(JSON.stringify(resposta)).not.toContain('secret-token');
   });
 
   it('persiste falha do transporte e permite retry sem duplicar o registro lógico', async () => {
@@ -143,11 +192,39 @@ class RepositorioEmMemoria implements ILembreteRepository {
     return this.contexto;
   }
 
-  async obterPorChave(): Promise<Lembrete | null> {
-    return this.lembrete;
+  async reivindicar(entrada: EntradaReivindicacaoLembrete): Promise<ReivindicacaoLembrete> {
+    if (this.lembrete?.status === 'ENVIADO') {
+      return { tipo: 'IDEMPOTENTE', lembrete: this.lembrete };
+    }
+    const claimToken = 'claim-1';
+    this.lembrete = {
+      id: this.lembrete?.id ?? 'lembrete-1',
+      clinicaId: entrada.clinicaId,
+      agendamentoId: entrada.agendamentoId,
+      pacienteId: entrada.pacienteId,
+      canal: entrada.canal,
+      janela: entrada.janela,
+      status: this.lembrete?.status ?? 'FALHOU',
+      transporte: entrada.transporte,
+      providerId: this.lembrete?.providerId ?? null,
+      codigoFalha: this.lembrete?.codigoFalha ?? null,
+      mensagemFalha: this.lembrete?.mensagemFalha ?? null,
+      emProcessamento: true,
+      claimToken,
+      claimExpiraEm: new Date(Date.now() + 30_000),
+      solicitadoPor: entrada.solicitadoPor,
+      criadoEm: this.lembrete?.criadoEm ?? new Date(),
+      atualizadoEm: new Date(),
+    };
+    return {
+      tipo: 'DISPARAR',
+      lembrete: this.lembrete,
+      claimToken,
+      idempotenciaKey: entrada.idempotenciaKey,
+    };
   }
 
-  async persistir(entrada: ResultadoPersistenciaLembrete): Promise<Lembrete> {
+  async finalizar(entrada: ResultadoPersistenciaLembrete): Promise<Lembrete> {
     this.persistencias += 1;
     const agora = new Date('2026-09-03T10:00:00.000Z');
     this.lembrete = {
@@ -162,6 +239,9 @@ class RepositorioEmMemoria implements ILembreteRepository {
       providerId: entrada.resultado.providerId,
       codigoFalha: entrada.resultado.codigoFalha,
       mensagemFalha: entrada.resultado.mensagemFalha,
+      emProcessamento: false,
+      claimToken: null,
+      claimExpiraEm: null,
       solicitadoPor: entrada.solicitadoPor,
       criadoEm: this.lembrete?.criadoEm ?? agora,
       atualizadoEm: agora,

@@ -264,7 +264,7 @@ export const SchemaAgendamentoResponse = z.object({
 export type AgendamentoResponse = z.infer<typeof SchemaAgendamentoResponse>;
 export const SchemaListaAgendamentos = schemaLista(SchemaAgendamentoResponse);
 
-export const SchemaSolicitarLembreteManual = z.object({});
+export const SchemaSolicitarLembreteManual = z.object({}).optional();
 export type SolicitarLembreteManualRequest = z.infer<typeof SchemaSolicitarLembreteManual>;
 
 export const SchemaLembreteResponse = z.object({

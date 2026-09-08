@@ -3,6 +3,7 @@ import {
   SchemaLembreteResponse,
   SchemaListaLembretes,
   SchemaListarPendenciasQuery,
+  SchemaSolicitarLembreteManual,
   type IdParams,
 } from '@odontosys/contracts';
 import type { FastifyInstance } from 'fastify';
@@ -10,9 +11,11 @@ import type { FastifyInstance } from 'fastify';
 import { contexto, exigirPapel } from '../../../platform/auth/jwt';
 import { schemaRota } from '../../../platform/http/schema';
 import { serializarLembrete, ServicoLembretes } from '../application/servico';
+import { LembreteRepository } from '../infra/lembrete.repository';
+import { criarTransporteLembrete } from '../infra/transportes';
 
 export async function registrarRotasLembretes(app: FastifyInstance): Promise<void> {
-  const servico = new ServicoLembretes();
+  const servico = new ServicoLembretes(new LembreteRepository(), criarTransporteLembrete());
 
   app.post<{ Params: IdParams }>(
     '/agendamentos/:id/lembrete',
@@ -26,6 +29,7 @@ export async function registrarRotasLembretes(app: FastifyInstance): Promise<voi
     },
     async (request) => {
       const params = SchemaIdParams.parse(request.params);
+      SchemaSolicitarLembreteManual.parse(request.body ?? {});
       const sessao = contexto(request);
       const lembrete = await servico.solicitarManual(sessao.clinicaId, sessao.usuarioId, params.id);
       return serializarLembrete(lembrete);

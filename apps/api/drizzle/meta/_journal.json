@@ -50,6 +50,13 @@
       "when": 1788889986805,
       "tag": "0006_fluffy_karma",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788891553544,
+      "tag": "0007_giant_silk_fever",
+      "breakpoints": true
     }
   ]
 }

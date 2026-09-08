@@ -10,12 +10,14 @@ function resultadoFalha(codigoFalha: string, mensagemFalha: string): ResultadoTr
   };
 }
 
-function idSimulacao(chaveLogica: string): string {
-  return `simulacao-${chaveLogica.replaceAll(':', '-')}`;
+function idSimulacao(idempotenciaKey: string): string {
+  return `simulacao-${idempotenciaKey.replaceAll(':', '-')}`;
 }
 
 export class SimuladorTransporte implements ITeletransporte {
   readonly nome = 'simulacao';
+
+  private readonly sucessos = new Map<string, ResultadoTransporte>();
 
   constructor(private readonly falhar = false) {}
 
@@ -23,12 +25,16 @@ export class SimuladorTransporte implements ITeletransporte {
     if (this.falhar) {
       return resultadoFalha('SIMULADOR_FALHA', 'Falha simulada no transporte.');
     }
-    return {
+    const anterior = this.sucessos.get(entrada.idempotenciaKey);
+    if (anterior) return anterior;
+    const resultado = {
       status: 'ENVIADO',
-      providerId: idSimulacao(entrada.chaveLogica),
+      providerId: idSimulacao(entrada.idempotenciaKey),
       codigoFalha: null,
       mensagemFalha: null,
-    };
+    } satisfies ResultadoTransporte;
+    this.sucessos.set(entrada.idempotenciaKey, resultado);
+    return resultado;
   }
 }
 

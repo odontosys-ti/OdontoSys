@@ -6,7 +6,10 @@ import { db } from '../src/platform/db';
 import { eq } from 'drizzle-orm';
 import { lembrete, registroAuditoria } from '../src/platform/db/schema';
 import { SchemaLembreteResponse, SchemaListaLembretes } from '@odontosys/contracts';
-import { limparBanco, login, semearClinica } from './helpers';
+import { limparBanco, login, semearClinica, semearClinicaSecundaria } from './helpers';
+import { ServicoLembretes } from '../src/modules/lembretes/application/servico';
+import { LembreteRepository } from '../src/modules/lembretes/infra/lembrete.repository';
+import { SimuladorTransporte } from '../src/modules/lembretes/infra/transportes';
 
 describe('API HTTP', () => {
   let app: FastifyInstance;
@@ -808,7 +811,9 @@ describe('API HTTP', () => {
       .select()
       .from(registroAuditoria)
       .where(eq(registroAuditoria.entidadeId, primeiro.json().id as string));
-    expect(auditorias).toHaveLength(1);
+    expect(auditorias.map((item) => item.acao)).toEqual(
+      expect.arrayContaining(['CRIAR', 'EDITAR'])
+    );
     expect(JSON.stringify(auditorias[0])).not.toContain('5511999998888');
   });
 
@@ -816,6 +821,14 @@ describe('API HTTP', () => {
     const recepcao = await login(app, 'recepcao@teste.local');
     const dentista = await login(app, 'dentista@teste.local');
     const ids = await obterIds();
+    await habilitarContato(app, ids.pacienteId, recepcao);
+    const falho = await criarAgendamento(app, recepcao, ids.pacienteId, ids.profissionalId);
+    const falhoId = falho.json().id as string;
+    const transporteFalho = new SimuladorTransporte(true);
+    const servico = new ServicoLembretes(new LembreteRepository(), transporteFalho);
+    await servico.solicitarManual(ids.clinicaId, ids.recepcaoId, falhoId);
+    const segunda = await semearClinicaSecundaria();
+    await servico.solicitarManual(segunda.clinicaId, segunda.recepcaoId, segunda.agendamentoId);
 
     const negadoDentista = await app.inject({
       method: 'GET',
@@ -831,9 +844,12 @@ describe('API HTTP', () => {
     });
     expect(lista.statusCode).toBe(200);
     expect(SchemaListaLembretes.parse(lista.json())).toMatchObject({
-      dados: [],
-      paginacao: { pagina: 1, tamanho: 10, total: 0 },
+      dados: [expect.objectContaining({ agendamentoId: falhoId, status: 'FALHOU' })],
+      paginacao: { pagina: 1, tamanho: 10, total: 1 },
     });
+    expect(lista.json().dados).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ agendamentoId: segunda.agendamentoId })])
+    );
 
     const negadoEnvio = await app.inject({
       method: 'POST',
@@ -871,9 +887,10 @@ describe('API HTTP', () => {
     });
     expect(envioCancelado.statusCode).toBe(422);
 
+    const segunda = await semearClinicaSecundaria();
     const outraClinica = await app.inject({
       method: 'POST',
-      url: '/api/v1/agendamentos/01900000-0000-7000-8000-000000000099/lembrete',
+      url: `/api/v1/agendamentos/${segunda.agendamentoId}/lembrete`,
       cookies: { sessionId: recepcao },
     });
     expect(outraClinica.statusCode).toBe(404);
@@ -922,25 +939,34 @@ async function criarAgendamento(
 let contadorAgendamento = 0;
 
 async function obterIds(): Promise<{
+  clinicaId: string;
+  recepcaoId: string;
   dentistaId: string;
   pacienteId: string;
   profissionalId: string;
   procedimentoId: string;
 }> {
-  const { usuario, paciente, profissional, procedimento } =
+  const { clinica, usuario, paciente, profissional, procedimento } =
     await import('../src/platform/db/schema');
   const database = db();
   const [u] = await database
     .select()
     .from(usuario)
     .where(eq(usuario.email, 'dentista@teste.local'));
+  const [recepcao] = await database
+    .select()
+    .from(usuario)
+    .where(eq(usuario.email, 'recepcao@teste.local'));
+  const [c] = await database.select().from(clinica);
   const [p] = await database.select().from(paciente);
   const [pr] = await database.select().from(profissional);
   const [pc] = await database.select().from(procedimento);
-  if (!u || !p || !pr || !pc) {
+  if (!c || !u || !recepcao || !p || !pr || !pc) {
     throw new Error('seed incompleto');
   }
   return {
+    clinicaId: c.id,
+    recepcaoId: recepcao.id,
     dentistaId: u.id,
     pacienteId: p.id,
     profissionalId: pr.id,

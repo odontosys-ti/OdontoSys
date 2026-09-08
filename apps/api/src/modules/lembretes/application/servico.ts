@@ -8,41 +8,42 @@ import {
   type Lembrete,
   chaveLogicaLembrete,
   montarMensagemLembrete,
+  sanitizarLembrete,
+  sanitizarResultadoTransporte,
   validarElegibilidadeLembrete,
 } from '../domain/lembrete';
-import { LembreteRepository } from '../infra/lembrete.repository';
-import { criarTransporteLembrete } from '../infra/transportes';
 
 export function serializarLembrete(item: Lembrete): LembreteResponse {
+  const seguro = sanitizarLembrete(item);
   return {
-    id: item.id,
-    agendamentoId: item.agendamentoId,
-    pacienteId: item.pacienteId,
-    canal: item.canal,
-    janela: item.janela,
-    status: item.status,
-    transporte: item.transporte,
-    providerId: item.providerId,
-    codigoFalha: item.codigoFalha,
-    mensagemFalha: item.mensagemFalha,
-    criadoEm: paraIso(item.criadoEm),
-    atualizadoEm: paraIso(item.atualizadoEm),
+    id: seguro.id,
+    agendamentoId: seguro.agendamentoId,
+    pacienteId: seguro.pacienteId,
+    canal: seguro.canal,
+    janela: seguro.janela,
+    status: seguro.status,
+    transporte: seguro.transporte,
+    providerId: seguro.providerId,
+    codigoFalha: seguro.codigoFalha,
+    mensagemFalha: seguro.mensagemFalha,
+    criadoEm: paraIso(seguro.criadoEm),
+    atualizadoEm: paraIso(seguro.atualizadoEm),
   };
 }
 
 function resultadoFalhaSegura() {
-  return {
-    status: 'FALHOU' as const,
+  return sanitizarResultadoTransporte({
+    status: 'FALHOU',
     providerId: null,
     codigoFalha: 'TRANSPORTE_ERRO',
-    mensagemFalha: 'Não foi possível concluir o envio pelo transporte configurado.',
-  };
+    mensagemFalha: null,
+  });
 }
 
 export class ServicoLembretes {
   constructor(
-    private readonly repo: ILembreteRepository = new LembreteRepository(),
-    private readonly transporte: ITeletransporte = criarTransporteLembrete()
+    private readonly repo: ILembreteRepository,
+    private readonly transporte: ITeletransporte
   ) {}
 
   async solicitarManual(clinicaId: string, usuarioId: string, agendamentoId: string) {
@@ -50,27 +51,38 @@ export class ServicoLembretes {
     if (!contexto) throw new AppError('NAO_ENCONTRADO');
 
     validarElegibilidadeLembrete(contexto);
-    const canal = contexto.canalPreferido;
-    if (canal) {
-      const existente = await this.repo.obterPorChave(clinicaId, agendamentoId, 'MANUAL', canal);
-      if (existente && ['ENVIADO', 'ENTREGUE'].includes(existente.status)) return existente;
-    }
-
     if (contexto.canalPreferido === null || contexto.telefone === null) {
       throw new AppError('REGRA_NEGOCIO');
     }
     const canalElegivel = contexto.canalPreferido;
     const telefoneElegivel = contexto.telefone;
+    const idempotenciaKey = chaveLogicaLembrete(agendamentoId, 'MANUAL', canalElegivel);
+    const reivindicacao = await this.repo.reivindicar({
+      clinicaId,
+      agendamentoId,
+      pacienteId: contexto.pacienteId,
+      canal: canalElegivel,
+      janela: 'MANUAL',
+      transporte: this.transporte.nome,
+      solicitadoPor: usuarioId,
+      idempotenciaKey,
+    });
+    if (reivindicacao.tipo === 'IDEMPOTENTE') return reivindicacao.lembrete;
+    if (reivindicacao.tipo === 'EM_PROCESSAMENTO') {
+      throw new AppError('REGRA_NEGOCIO', [
+        { campo: 'lembrete', mensagem: 'O envio deste lembrete já está em processamento.' },
+      ]);
+    }
+
     const mensagem = montarMensagemLembrete({
       nomePaciente: contexto.nomePaciente,
       inicio: contexto.inicio,
       fusoHorario: contexto.fusoHorario,
     });
-    const chaveLogica = chaveLogicaLembrete(agendamentoId, 'MANUAL', canalElegivel);
     let resultado;
     try {
       resultado = await this.transporte.enviar({
-        chaveLogica,
+        idempotenciaKey: reivindicacao.idempotenciaKey,
         telefone: telefoneElegivel,
         mensagem,
         canal: canalElegivel,
@@ -79,7 +91,7 @@ export class ServicoLembretes {
       resultado = resultadoFalhaSegura();
     }
 
-    const persistido = await this.repo.persistir({
+    const persistido = await this.repo.finalizar({
       clinicaId,
       agendamentoId,
       pacienteId: contexto.pacienteId,
@@ -88,6 +100,8 @@ export class ServicoLembretes {
       transporte: this.transporte.nome,
       resultado,
       solicitadoPor: usuarioId,
+      claimToken: reivindicacao.claimToken,
+      lembreteId: reivindicacao.lembrete.id,
     });
     return persistido;
   }

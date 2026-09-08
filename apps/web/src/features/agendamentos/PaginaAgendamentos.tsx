@@ -77,6 +77,7 @@ export function PaginaAgendamentos(): ReactElement {
   const [novoInicio, setNovoInicio] = useState('');
   const reagendar = useReagendarAgendamento(reagendando?.id);
   const [cancelando, setCancelando] = useState<AgendamentoResponse>();
+  const [lembretePendenteId, setLembretePendenteId] = useState<string | null>(null);
 
   const nomePaciente = (id: string) =>
     pacientes.data?.dados.find((item) => item.id === id)?.nome ?? `Paciente ${id.slice(0, 8)}`;
@@ -138,6 +139,7 @@ export function PaginaAgendamentos(): ReactElement {
   const solicitarLembrete = (item: AgendamentoResponse) => {
     enviarLembrete.mutate(item.id, {
       onSuccess: (lembrete) => {
+        setLembretePendenteId(lembrete.status === 'FALHOU' ? lembrete.agendamentoId : null);
         toast.mostrar(
           lembrete.status === 'FALHOU'
             ? 'Lembrete pendente de nova tentativa.'
@@ -188,14 +190,26 @@ export function PaginaAgendamentos(): ReactElement {
           </Button>
         ) : null}
         {podeEnviarLembrete(item) ? (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={enviarLembrete.isPending}
-            onClick={() => solicitarLembrete(item)}
-          >
-            {enviarLembrete.isPending ? 'Enviando…' : 'Enviar lembrete'}
-          </Button>
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={enviarLembrete.isPending}
+              onClick={() => solicitarLembrete(item)}
+            >
+              {enviarLembrete.isPending ? 'Enviando…' : 'Enviar lembrete'}
+            </Button>
+            {lembretePendenteId === item.id ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={enviarLembrete.isPending}
+                onClick={() => solicitarLembrete(item)}
+              >
+                Tentar envio novamente
+              </Button>
+            ) : null}
+          </>
         ) : null}
       </div>
     ) : null;
