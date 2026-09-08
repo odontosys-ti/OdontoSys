@@ -178,3 +178,10 @@ Worker CLI com candidato sintético real: CONCLUIDO, selecionados=2, enviados=2,
 O lint agregado permanece limitado por formatação preexistente em `README.md`; o ledger foi
 atualizado e formatado nesta rodada, sem editar o README ou o `package.json` raiz. Esta rodada está verificada tecnicamente; aprovação
 independente ainda não é reivindicada neste relatório.
+
+### Proveniência desta correção
+
+- Código e testes: `c613a11 fix(lembretes): make retries paginated and persistent`.
+- Documentação, ledger e evidências: `676aa94 docs(release): refresh review evidence`.
+- Este ajuste final do relatório é somente documental; `README.md` e `package.json` continuam fora
+  dos commits da rodada.
