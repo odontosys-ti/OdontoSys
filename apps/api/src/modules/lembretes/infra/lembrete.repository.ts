@@ -1,4 +1,4 @@
-import { and, count, desc, eq, isNull } from 'drizzle-orm';
+import { and, count, desc, eq, isNull, lte, or } from 'drizzle-orm';
 
 import { registrarAuditoria } from '../../../platform/auditoria/service';
 import { db } from '../../../platform/db';
@@ -248,11 +248,17 @@ export class LembreteRepository implements ILembreteRepository {
     pagina: number,
     tamanho: number
   ): Promise<ListaLembretes> {
+    const agora = new Date();
     const filtro = and(
       eq(lembrete.clinicaId, clinicaId),
       eq(lembrete.status, 'FALHOU'),
-      eq(lembrete.emProcessamento, false),
-      isNull(lembrete.claimToken)
+      or(
+        eq(lembrete.emProcessamento, false),
+        and(
+          eq(lembrete.emProcessamento, true),
+          or(isNull(lembrete.claimExpiraEm), lte(lembrete.claimExpiraEm, agora))
+        )
+      )
     );
     const [linhas, totais] = await Promise.all([
       db()

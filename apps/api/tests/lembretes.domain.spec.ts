@@ -101,6 +101,23 @@ describe('domínio de lembretes', () => {
     });
   });
 
+  it.each(['toString', '__proto__', {}, Object.create(null)])(
+    'usa somente códigos próprios da whitelist para entrada insegura: %s',
+    (codigoFalha) => {
+      const resultado = sanitizarResultadoTransporte({
+        status: 'FALHOU',
+        providerId: null,
+        codigoFalha: codigoFalha as string,
+        mensagemFalha: { toString: () => 'mensagem bruta' } as unknown as string,
+      });
+
+      expect(resultado.codigoFalha).toBe('FALHA_DESCONHECIDA');
+      expect(resultado.mensagemFalha).toBe('Não foi possível concluir o envio do lembrete.');
+      expect(typeof resultado.codigoFalha).toBe('string');
+      expect(typeof resultado.mensagemFalha).toBe('string');
+    }
+  );
+
   it('serializa falha legada sem expor texto arbitrário', () => {
     const resposta = serializarLembrete({
       id: 'lembrete-1',

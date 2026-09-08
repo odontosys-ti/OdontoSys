@@ -101,23 +101,29 @@ export interface ILembreteRepository {
   listarPendencias(clinicaId: string, pagina: number, tamanho: number): Promise<ListaLembretes>;
 }
 
-const MENSAGENS_FALHA_SEGURAS = {
+const MENSAGENS_FALHA_SEGURAS = Object.freeze({
   SIMULADOR_FALHA: 'Falha simulada no transporte.',
   TRANSPORTE_ERRO: 'Não foi possível concluir o envio pelo transporte configurado.',
   TRANSPORTE_NAO_CONFIGURADO: 'O transporte de mensagens não está configurado.',
   TRANSPORTE_INDISPONIVEL: 'O transporte de mensagens está indisponível.',
   EM_PROCESSAMENTO: 'Envio em processamento.',
   FALHA_DESCONHECIDA: 'Não foi possível concluir o envio do lembrete.',
-} as const;
+} as const);
 
 export type CodigoFalhaLembrete = keyof typeof MENSAGENS_FALHA_SEGURAS;
 
+function codigoFalhaSeguro(valor: unknown): valor is CodigoFalhaLembrete {
+  return (
+    typeof valor === 'string' &&
+    Object.prototype.hasOwnProperty.call(MENSAGENS_FALHA_SEGURAS, valor)
+  );
+}
+
 export function sanitizarResultadoTransporte(resultado: ResultadoTransporte): ResultadoTransporte {
   if (resultado.status === 'FALHOU') {
-    const codigo =
-      typeof resultado.codigoFalha === 'string' && resultado.codigoFalha in MENSAGENS_FALHA_SEGURAS
-        ? (resultado.codigoFalha as CodigoFalhaLembrete)
-        : 'FALHA_DESCONHECIDA';
+    const codigo = codigoFalhaSeguro(resultado.codigoFalha)
+      ? resultado.codigoFalha
+      : 'FALHA_DESCONHECIDA';
     return {
       status: 'FALHOU',
       providerId: null,

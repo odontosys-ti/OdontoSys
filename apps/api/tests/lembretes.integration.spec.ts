@@ -3,7 +3,12 @@ import { and, eq } from 'drizzle-orm';
 
 import { ServicoLembretes } from '../src/modules/lembretes/application/servico';
 import { LembreteRepository } from '../src/modules/lembretes/infra/lembrete.repository';
-import type { EntradaTransporte, ITeletransporte } from '../src/modules/lembretes/domain/lembrete';
+import type {
+  EntradaTransporte,
+  ITeletransporte,
+  ResultadoPersistenciaLembrete,
+  ResultadoTransporte,
+} from '../src/modules/lembretes/domain/lembrete';
 import { db, fecharDb } from '../src/platform/db';
 import { agendamento, lembrete, paciente, registroAuditoria } from '../src/platform/db/schema';
 import { criarUuidV7 } from '../src/platform/uuid';
@@ -139,6 +144,13 @@ describe('integração PostgreSQL de lembretes manuais', () => {
     });
     await new Promise((resolve) => setTimeout(resolve, 10));
 
+    const pendencias = await repo.listarPendencias(ids.clinicaId, 1, 10);
+    expect(pendencias.total).toBe(1);
+    expect(pendencias.itens[0]).toMatchObject({
+      agendamentoId,
+      status: 'FALHOU',
+    });
+
     const recuperado = await new ServicoLembretes(repo, new SimuladorTransporte()).solicitarManual(
       ids.clinicaId,
       ids.recepcaoId,
@@ -146,6 +158,80 @@ describe('integração PostgreSQL de lembretes manuais', () => {
     );
     expect(recuperado.status).toBe('ENVIADO');
     expect(recuperado.emProcessamento).toBe(false);
+  });
+
+  it('recupera com chave idempotente após sucesso do transporte e falha de finalização', async () => {
+    const ids = await semearClinica();
+    const agendamentoId = await criarAgendamento(ids);
+    await db()
+      .update(paciente)
+      .set({ telefone: '5511999998888', canalPreferido: 'WHATSAPP', consentimentoAtivo: true })
+      .where(eq(paciente.id, ids.pacienteId));
+
+    const repo = new LembreteRepository();
+    const finalizarReal = repo.finalizar.bind(repo);
+    let falharFinalizacao = true;
+    repo.finalizar = async (entrada: ResultadoPersistenciaLembrete) => {
+      if (falharFinalizacao) {
+        falharFinalizacao = false;
+        throw new Error('falha simulada ao finalizar persistência');
+      }
+      return finalizarReal(entrada);
+    };
+
+    let chamadas = 0;
+    let entregas = 0;
+    let resultadoProvider: ResultadoTransporte | undefined;
+    const transporte: ITeletransporte = {
+      nome: 'provider-idempotente-teste',
+      async enviar(entrada: EntradaTransporte) {
+        chamadas += 1;
+        if (!resultadoProvider) {
+          entregas += 1;
+          resultadoProvider = {
+            status: 'ENVIADO',
+            providerId: `provider-${entrada.idempotenciaKey}`,
+            codigoFalha: null,
+            mensagemFalha: null,
+          };
+        }
+        return resultadoProvider;
+      },
+    };
+
+    const servico = new ServicoLembretes(repo, transporte);
+    await expect(
+      servico.solicitarManual(ids.clinicaId, ids.recepcaoId, agendamentoId)
+    ).rejects.toThrow('falha simulada ao finalizar persistência');
+    expect(chamadas).toBe(1);
+
+    const pendente = await db()
+      .select()
+      .from(lembrete)
+      .where(eq(lembrete.agendamentoId, agendamentoId));
+    expect(pendente[0]).toMatchObject({ emProcessamento: true });
+
+    await expect(
+      servico.solicitarManual(ids.clinicaId, ids.recepcaoId, agendamentoId)
+    ).rejects.toMatchObject({ codigo: 'REGRA_NEGOCIO' });
+    expect(chamadas).toBe(1);
+
+    await db()
+      .update(lembrete)
+      .set({ claimExpiraEm: new Date(0) })
+      .where(eq(lembrete.id, pendente[0].id));
+
+    const recuperado = await servico.solicitarManual(ids.clinicaId, ids.recepcaoId, agendamentoId);
+    expect(recuperado.status).toBe('ENVIADO');
+    expect(chamadas).toBe(2);
+    expect(entregas).toBe(1);
+
+    const final = await db()
+      .select()
+      .from(lembrete)
+      .where(eq(lembrete.agendamentoId, agendamentoId));
+    expect(final).toHaveLength(1);
+    expect(final[0]).toMatchObject({ status: 'ENVIADO', emProcessamento: false });
   });
 });
 
