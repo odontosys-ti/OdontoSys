@@ -32,6 +32,27 @@ describe('migrações', () => {
           { table_name: 'clinica' },
           { table_name: 'registro_auditoria' },
         ]);
+        const colunas = await banco.query<{ column_name: string }>(`
+          SELECT column_name
+          FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'paciente'
+            AND column_name IN (
+              'telefone',
+              'canal_preferido',
+              'consentimento_ativo',
+              'consentimento_concedido_em',
+              'consentimento_revogado_em'
+            )
+          ORDER BY column_name
+        `);
+        expect(colunas.rows).toEqual([
+          { column_name: 'canal_preferido' },
+          { column_name: 'consentimento_ativo' },
+          { column_name: 'consentimento_concedido_em' },
+          { column_name: 'consentimento_revogado_em' },
+          { column_name: 'telefone' },
+        ]);
       } finally {
         await banco.end();
       }

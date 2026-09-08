@@ -76,15 +76,78 @@ export type LoginResponse = UsuarioPublico;
 export const SchemaMeResponse = SchemaUsuarioPublico;
 export type MeResponse = UsuarioPublico;
 
-export const SchemaCriarPaciente = z.object({
-  nome: z.string().min(1, 'Nome é obrigatório'),
-  documento: z.string().min(11, 'Documento inválido'),
-  nascimento: z.string().min(1, 'Nascimento é obrigatório'),
-  observacoes: z.string().optional().default(''),
+export const CanalMensagemEnum = z.enum(['WHATSAPP', 'SMS']);
+export type CanalMensagem = z.infer<typeof CanalMensagemEnum>;
+
+export function normalizarTelefone(valor: string): string {
+  return valor.replace(/\D/g, '');
+}
+
+const SchemaTelefone = z
+  .string()
+  .trim()
+  .min(1, 'Telefone é obrigatório')
+  .refine(
+    (valor) =>
+      /^[+\d\s().-]+$/.test(valor) &&
+      normalizarTelefone(valor).length >= 10 &&
+      normalizarTelefone(valor).length <= 15,
+    'Telefone inválido'
+  );
+
+const SchemaContatoPaciente = z.object({
+  telefone: SchemaTelefone.optional(),
+  canalPreferido: CanalMensagemEnum.optional(),
+  consentimentoAtivo: z.boolean().default(false),
 });
+
+function validarContatoPaciente(
+  dados: {
+    telefone?: string;
+    canalPreferido?: CanalMensagem;
+    consentimentoAtivo?: boolean;
+  },
+  contexto: z.RefinementCtx
+): void {
+  if (!dados.consentimentoAtivo) return;
+  if (!dados.telefone) {
+    contexto.addIssue({
+      code: 'custom',
+      path: ['telefone'],
+      message: 'Telefone é obrigatório quando o consentimento está ativo',
+    });
+  }
+  if (!dados.canalPreferido) {
+    contexto.addIssue({
+      code: 'custom',
+      path: ['canalPreferido'],
+      message: 'Canal preferido é obrigatório quando o consentimento está ativo',
+    });
+  }
+}
+
+export const SchemaCriarPaciente = z
+  .object({
+    nome: z.string().min(1, 'Nome é obrigatório'),
+    documento: z.string().min(11, 'Documento inválido'),
+    nascimento: z.string().min(1, 'Nascimento é obrigatório'),
+    observacoes: z.string().optional().default(''),
+    ...SchemaContatoPaciente.shape,
+  })
+  .superRefine(validarContatoPaciente);
 export type CriarPacienteRequest = z.infer<typeof SchemaCriarPaciente>;
 
-export const SchemaAtualizarPaciente = SchemaCriarPaciente.partial();
+export const SchemaAtualizarPaciente = z
+  .object({
+    nome: z.string().min(1, 'Nome é obrigatório').optional(),
+    documento: z.string().min(11, 'Documento inválido').optional(),
+    nascimento: z.string().min(1, 'Nascimento é obrigatório').optional(),
+    observacoes: z.string().optional(),
+    telefone: SchemaTelefone.optional(),
+    canalPreferido: CanalMensagemEnum.optional(),
+    consentimentoAtivo: z.boolean().optional(),
+  })
+  .superRefine(validarContatoPaciente);
 export type AtualizarPacienteRequest = z.infer<typeof SchemaAtualizarPaciente>;
 
 export const SchemaPacienteResponse = z.object({
@@ -93,6 +156,11 @@ export const SchemaPacienteResponse = z.object({
   documento: z.string(),
   nascimento: z.string(),
   observacoes: z.string(),
+  telefone: z.string().nullable(),
+  canalPreferido: CanalMensagemEnum.nullable(),
+  consentimentoAtivo: z.boolean(),
+  consentimentoConcedidoEm: z.string().nullable(),
+  consentimentoRevogadoEm: z.string().nullable(),
   ativo: z.boolean(),
   criadoEm: z.string(),
   atualizadoEm: z.string(),

@@ -21,6 +21,7 @@ export const statusAgendamentoEnum = pgEnum('status_agendamento', [
   'ATENDIDO',
   'CANCELADO',
 ]);
+export const canalMensagemEnum = pgEnum('canal_mensagem', ['WHATSAPP', 'SMS']);
 export const acaoAuditoriaEnum = pgEnum('acao_auditoria', ['CRIAR', 'EDITAR', 'DELETAR']);
 
 const timestamps = {
@@ -85,10 +86,27 @@ export const paciente = pgTable(
     documento: text('documento').notNull(),
     nascimento: timestamp('nascimento', { withTimezone: true, mode: 'date' }).notNull(),
     observacoes: text('observacoes').notNull().default(''),
+    telefone: text('telefone'),
+    canalPreferido: canalMensagemEnum('canal_preferido'),
+    consentimentoAtivo: boolean('consentimento_ativo').notNull().default(false),
+    consentimentoConcedidoEm: timestamp('consentimento_concedido_em', {
+      withTimezone: true,
+      mode: 'date',
+    }),
+    consentimentoRevogadoEm: timestamp('consentimento_revogado_em', {
+      withTimezone: true,
+      mode: 'date',
+    }),
     ativo: boolean('ativo').notNull().default(true),
     ...timestamps,
   },
-  (table) => [index('paciente_clinica_idx').on(table.clinicaId)]
+  (table) => [
+    index('paciente_clinica_idx').on(table.clinicaId),
+    check(
+      'consentimento_ativo_requer_contato',
+      sql`NOT ${table.consentimentoAtivo} OR (${table.telefone} IS NOT NULL AND ${table.canalPreferido} IS NOT NULL)`
+    ),
+  ]
 );
 
 export const procedimento = pgTable(

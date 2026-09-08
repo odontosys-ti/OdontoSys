@@ -17,6 +17,15 @@ export function serializarPaciente(paciente: Paciente): PacienteResponse {
     documento: paciente.documento,
     nascimento: paraIso(paciente.nascimento),
     observacoes: paciente.observacoes,
+    telefone: paciente.telefone,
+    canalPreferido: paciente.canalPreferido,
+    consentimentoAtivo: paciente.consentimentoAtivo,
+    consentimentoConcedidoEm: paciente.consentimentoConcedidoEm
+      ? paraIso(paciente.consentimentoConcedidoEm)
+      : null,
+    consentimentoRevogadoEm: paciente.consentimentoRevogadoEm
+      ? paraIso(paciente.consentimentoRevogadoEm)
+      : null,
     ativo: paciente.ativo,
     criadoEm: paraIso(paciente.criadoEm),
     atualizadoEm: paraIso(paciente.atualizadoEm),

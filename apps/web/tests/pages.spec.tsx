@@ -34,6 +34,11 @@ const paciente = {
   documento: '12345678901',
   nascimento: '1990-01-01T00:00:00.000Z',
   observacoes: '',
+  telefone: null,
+  canalPreferido: null,
+  consentimentoAtivo: false,
+  consentimentoConcedidoEm: null,
+  consentimentoRevogadoEm: null,
   ...dataBase,
 };
 const procedimento = {
@@ -268,6 +273,39 @@ describe('páginas da base', () => {
     expect(requisicao).toHaveBeenCalledWith(
       expect.stringContaining('/pacientes'),
       expect.objectContaining({ method: 'POST' })
+    );
+  });
+
+  it('salva telefone, canal preferido e consentimento no formulário do paciente', async () => {
+    const requisicao = vi.fn((_entrada: string | URL | Request, init?: RequestInit) =>
+      init?.method === 'POST'
+        ? resposta({ ...paciente, consentimentoAtivo: true })
+        : resposta({ dados: [paciente], paginacao })
+    );
+    vi.stubGlobal('fetch', requisicao);
+    renderizar(<PaginaPacienteFormulario />, 'RECEPCAO');
+
+    fireEvent.change(screen.getByLabelText('Nome completo'), { target: { value: 'Ana Lima' } });
+    fireEvent.change(screen.getByLabelText('Documento'), { target: { value: '12345678901' } });
+    fireEvent.change(screen.getByLabelText('Data de nascimento'), {
+      target: { value: '1990-01-01' },
+    });
+    fireEvent.change(screen.getByLabelText('Telefone para mensagens'), {
+      target: { value: '(11) 99999-8888' },
+    });
+    fireEvent.change(screen.getByLabelText('Canal preferido'), {
+      target: { value: 'WHATSAPP' },
+    });
+    fireEvent.click(screen.getByLabelText('Consentimento para receber mensagens'));
+    fireEvent.click(screen.getByRole('button', { name: 'Cadastrar paciente' }));
+
+    expect(await screen.findByText('Paciente cadastrado.')).toBeInTheDocument();
+    expect(requisicao).toHaveBeenCalledWith(
+      expect.stringContaining('/pacientes'),
+      expect.objectContaining({
+        method: 'POST',
+        body: expect.stringContaining('11999998888'),
+      })
     );
   });
 

@@ -1,0 +1,1 @@
+ALTER TABLE "paciente" ADD CONSTRAINT "consentimento_ativo_requer_contato" CHECK (NOT "paciente"."consentimento_ativo" OR ("paciente"."telefone" IS NOT NULL AND "paciente"."canal_preferido" IS NOT NULL));

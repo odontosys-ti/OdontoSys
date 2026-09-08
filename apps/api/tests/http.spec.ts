@@ -185,6 +185,121 @@ describe('API HTTP', () => {
     expect(acoes).toContain('EDITAR');
   });
 
+  it('atualiza contato, concede e revoga consentimento com auditoria sem dados pessoais', async () => {
+    const token = await login(app, 'recepcao@teste.local');
+    const { pacienteId } = await obterIds();
+
+    const atualizacao = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/pacientes/${pacienteId}`,
+      cookies: { sessionId: token },
+      payload: {
+        telefone: '(11) 99999-8888',
+        canalPreferido: 'WHATSAPP',
+        consentimentoAtivo: true,
+      },
+    });
+
+    expect(atualizacao.statusCode).toBe(200);
+    expect(atualizacao.json()).toMatchObject({
+      telefone: '11999998888',
+      canalPreferido: 'WHATSAPP',
+      consentimentoAtivo: true,
+      consentimentoRevogadoEm: null,
+    });
+    expect(atualizacao.json().consentimentoConcedidoEm).toEqual(expect.any(String));
+
+    const revogacao = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/pacientes/${pacienteId}`,
+      cookies: { sessionId: token },
+      payload: { consentimentoAtivo: false },
+    });
+
+    expect(revogacao.statusCode).toBe(200);
+    expect(revogacao.json()).toMatchObject({
+      telefone: '11999998888',
+      canalPreferido: 'WHATSAPP',
+      consentimentoAtivo: false,
+      consentimentoConcedidoEm: expect.any(String),
+    });
+    expect(revogacao.json().consentimentoRevogadoEm).toEqual(expect.any(String));
+
+    const registros = await db()
+      .select()
+      .from(registroAuditoria)
+      .where(eq(registroAuditoria.entidadeId, pacienteId));
+    expect(registros).toHaveLength(2);
+    expect(registros.every((registro) => !JSON.stringify(registro).includes('11999998888'))).toBe(
+      true
+    );
+  });
+
+  it('retorna defaults seguros de contato para paciente legado', async () => {
+    const token = await login(app, 'recepcao@teste.local');
+    const { pacienteId } = await obterIds();
+
+    const resposta = await app.inject({
+      method: 'GET',
+      url: `/api/v1/pacientes/${pacienteId}`,
+      cookies: { sessionId: token },
+    });
+
+    expect(resposta.statusCode).toBe(200);
+    expect(resposta.json()).toMatchObject({
+      telefone: null,
+      canalPreferido: null,
+      consentimentoAtivo: false,
+      consentimentoConcedidoEm: null,
+      consentimentoRevogadoEm: null,
+    });
+  });
+
+  it('rejeita contato inválido e consentimento ativo sem dados obrigatórios', async () => {
+    const token = await login(app, 'recepcao@teste.local');
+    const { pacienteId } = await obterIds();
+
+    const telefoneInvalido = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/pacientes/${pacienteId}`,
+      cookies: { sessionId: token },
+      payload: { telefone: 'abc', canalPreferido: 'TELEGRAM' },
+    });
+    expect(telefoneInvalido.statusCode).toBe(400);
+    expect(telefoneInvalido.json().erro.codigo).toBe('VALIDACAO_INVALIDA');
+
+    const consentimentoSemContato = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/pacientes/${pacienteId}`,
+      cookies: { sessionId: token },
+      payload: { consentimentoAtivo: true },
+    });
+    expect(consentimentoSemContato.statusCode).toBe(400);
+    expect(consentimentoSemContato.json()).toMatchObject({
+      erro: { codigo: 'VALIDACAO_INVALIDA' },
+      requestId: expect.any(String),
+    });
+  });
+
+  it('dentista não pode alterar contato ou consentimento', async () => {
+    const token = await login(app, 'dentista@teste.local');
+    const { pacienteId } = await obterIds();
+
+    const resposta = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/pacientes/${pacienteId}`,
+      cookies: { sessionId: token },
+      payload: {
+        telefone: '11999998888',
+        canalPreferido: 'SMS',
+        consentimentoAtivo: true,
+      },
+    });
+
+    expect(resposta.statusCode).toBe(403);
+    expect(resposta.json().erro.codigo).toBe('SEM_PERMISSAO');
+  });
+
   it('RECEPCAO não cria profissional (403) e ADMIN cria e edita profissional com auditoria', async () => {
     const tokenRecepcao = await login(app, 'recepcao@teste.local');
     const tokenAdmin = await login(app, 'admin@teste.local');

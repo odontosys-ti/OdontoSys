@@ -5,6 +5,7 @@ import {
   SchemaListaPacientes,
   SchemaPaginacaoQuery,
   SchemaPacienteResponse,
+  normalizarTelefone,
   type IdParams,
 } from '@odontosys/contracts';
 import type { FastifyInstance } from 'fastify';
@@ -63,6 +64,9 @@ export async function registrarRotasPacientes(app: FastifyInstance): Promise<voi
         documento: body.documento,
         nascimento: parseData(body.nascimento, 'nascimento'),
         observacoes: body.observacoes,
+        telefone: body.telefone ? normalizarTelefone(body.telefone) : undefined,
+        canalPreferido: body.canalPreferido,
+        consentimentoAtivo: body.consentimentoAtivo,
       });
       return reply.status(201).send(serializarPaciente(criado));
     }
@@ -109,6 +113,9 @@ export async function registrarRotasPacientes(app: FastifyInstance): Promise<voi
         documento: body.documento,
         nascimento: body.nascimento ? parseData(body.nascimento, 'nascimento') : undefined,
         observacoes: body.observacoes,
+        telefone: body.telefone ? normalizarTelefone(body.telefone) : undefined,
+        canalPreferido: body.canalPreferido,
+        consentimentoAtivo: body.consentimentoAtivo,
       });
       return serializarPaciente(atualizado);
     }
