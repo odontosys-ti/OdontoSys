@@ -4,7 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { criarApp } from '../src/platform/http/app';
 import { db } from '../src/platform/db';
 import { eq } from 'drizzle-orm';
-import { lembrete, registroAuditoria } from '../src/platform/db/schema';
+import { lembrete, paciente, registroAuditoria } from '../src/platform/db/schema';
 import { SchemaLembreteResponse, SchemaListaLembretes } from '@odontosys/contracts';
 import { limparBanco, login, semearClinica, semearClinicaSecundaria } from './helpers';
 import { ServicoLembretes } from '../src/modules/lembretes/application/servico';
@@ -863,6 +863,10 @@ describe('API HTTP', () => {
     const recepcao = await login(app, 'recepcao@teste.local');
     const ids = await obterIds();
     await habilitarContato(app, ids.pacienteId, recepcao);
+    await db()
+      .update(paciente)
+      .set({ canalPreferido: 'SMS' })
+      .where(eq(paciente.id, ids.pacienteId));
     const criado = await criarAgendamento(app, recepcao, ids.pacienteId, ids.profissionalId);
     const agendamentoId = criado.json().id as string;
     const repo = new LembreteRepository();

@@ -32,8 +32,8 @@ prova de quatro auditorias (criação/finalização manual e automática).
 Após a correção do teste:
 
 - E2E PostgreSQL: **1/1**.
-- API completa: **81/81** em 13 arquivos.
-- Web completa: **37/37** em 4 arquivos.
+- API completa no primeiro fechamento: **81/81** em 13 arquivos.
+- Web completa no primeiro fechamento: **37/37** em 4 arquivos.
 - Cobertura: API **88,08% statements / 75,94% branches**; web **82,02% statements / 71,51%
   branches**.
 - Type-check workspace: passou.
@@ -64,7 +64,7 @@ as auditorias permanecem quatro e o acesso ao agendamento da segunda clínica re
 | ----------------------------------------------------------------------- | --------------------------------------------------------------- |
 | `pnpm lint`                                                             | bloqueado somente por `README.md`, pré-existente e fora do diff |
 | `pnpm type-check`                                                       | passou                                                          |
-| `pnpm test`                                                             | passou: API 81/81, web 37/37                                    |
+| `pnpm test`                                                             | passou no primeiro fechamento: API 81/81, web 37/37             |
 | `pnpm build`                                                            | passou; aviso conhecido de chunk web                            |
 | `pnpm test:coverage`                                                    | passou com os percentuais acima                                 |
 | `pnpm audit --prod`                                                     | passou sem vulnerabilidades conhecidas                          |
@@ -176,8 +176,8 @@ Worker CLI com candidato sintético real: CONCLUIDO, selecionados=2, enviados=2,
 ```
 
 O lint agregado permanece limitado por formatação preexistente em `README.md`; o ledger foi
-atualizado e formatado nesta rodada, sem editar o README ou o `package.json` raiz. Esta rodada está verificada tecnicamente; aprovação
-independente ainda não é reivindicada neste relatório.
+atualizado e formatado nesta rodada, sem editar o README ou o `package.json` raiz. Esta rodada foi
+verificada tecnicamente e aprovada na re-revisão independente descrita abaixo.
 
 ### Proveniência desta correção
 
@@ -185,3 +185,12 @@ independente ainda não é reivindicada neste relatório.
 - Documentação, ledger e evidências: `676aa94 docs(release): refresh review evidence`.
 - Este ajuste final do relatório é somente documental; `README.md` e `package.json` continuam fora
   dos commits da rodada.
+
+### Re-revisão independente final
+
+O revisor independente aprovou os commits `c613a11`, `676aa94` e `f640091` com **0 Critical** e
+**0 Important**. Confirmou paginação real na web, retry persistente preservando janela/canal,
+validação de horários inválidos, ausência de asserções não nulas novas, configuração por clínica,
+elegibilidade restrita, heartbeat de lease, E2E com efeito persistido, migrações e provider real
+congelado sem credenciais/rede. O teste HTTP de retry também usa `SMS` para provar a preservação do
+canal além do fluxo `WHATSAPP`.
