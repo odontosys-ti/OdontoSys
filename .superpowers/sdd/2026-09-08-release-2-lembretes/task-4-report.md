@@ -81,3 +81,62 @@ foram usados segredos, provedores reais, chamadas de rede ou dados pessoais reai
 - Commit final desta tarefa: `docs(release): documenta entrega da release 2`.
 - O commit final inclui o teste E2E, `docs/release-2-entregue.md` e este relatório.
 - `README.md` e `package.json` raiz continuam apenas com as alterações pré-existentes do usuário.
+
+## Rodada final de revisão — correções e evidências
+
+Esta rodada foi feita na mesma branch `release-2`, sem Task 3 adicional, merge ou PR. O trabalho
+foi conduzido em TDD: os testes novos foram escritos e executados em RED antes das alterações de
+produção; a falha observada confirmou a elegibilidade ampla, a ausência da fonte persistida por
+clínica, a ausência do heartbeat e a falta da lista web. Depois da implementação, os mesmos focos
+passaram em GREEN.
+
+### Correções entregues
+
+- `usePendenciasLembretes` consulta o contrato paginado de `/lembretes/pendencias`; a agenda exibe
+  loading, vazio, erro com retry/refetch e fila em tabela/cards responsivos. Retry por item chama o
+  POST manual e invalida a query da fila.
+- `ConfiguracaoClinicaRepository` e `ServicoConfiguracaoLembretes` validam a configuração
+  persistida por clínica. A chave `LEMBRETES_AUTOMATICOS` recebe seed/default seguro; a configuração
+  de ambiente permanece somente fallback quando não existe registro. O worker agrupa candidatos
+  por clínica antes de selecionar janelas diferentes. Não existe escrita de configuração nesta
+  release, logo não foi criado evento de auditoria artificial.
+- A elegibilidade compartilhada e a seleção automática aceitam exclusivamente `AGENDADO` e
+  `CONFIRMADO`; `FALTOU`, `ATENDIDO` e `CANCELADO` são rejeitados em domínio, API e web.
+- O serviço inicia heartbeat periódico com o token original do claim, limpa o timer no sucesso ou
+  erro do transporte e não finaliza quando perde a renovação. A recuperação segue pelo claim
+  expirado; finalização continua condicionada ao token vigente. O teste PostgreSQL usa lease de
+  40 ms, transporte de 180 ms e concorrência real, com uma chamada de transporte.
+- O E2E agora chama `executarPassadaLembretes`, a composição exportada pelo comando CLI, com um
+  candidato real criado por HTTP e persistido no PostgreSQL. A consulta posterior prova o efeito
+  no banco; subprocesso foi evitado por compartilhar deterministicamente o banco de teste e isso
+  está documentado como a estratégia de evidência do comando.
+
+### RED/GREEN desta rodada
+
+RED observado antes da implementação:
+
+```text
+API: 5 falhas novas — FALHOU/ATENDIDO ainda selecionados, configuração por clínica ausente.
+Web: 3 falhas novas — estados/lista/retry de pendências inexistentes.
+```
+
+GREEN focado após a implementação:
+
+```text
+rtk pnpm --filter @odontosys/api exec vitest run tests/release2.e2e.spec.ts
+Test Files  1 passed (1)
+Tests       1 passed (1)
+
+API focada (http + domínio + automático + integração PostgreSQL): 87/87
+Web focada (pages.spec.tsx): 42/42
+```
+
+### Proveniência
+
+- Base anterior: `09897d1 docs(release): documenta entrega da release 2`.
+- Implementação desta rodada: `9787821 feat(lembretes): harden release 2 reminder operations`.
+- Documentação desta rodada: commit imediatamente posterior à implementação, com a mensagem
+  `docs(release): record final review guarantees`; a proveniência final pode ser conferida no
+  histórico da branch `release-2`.
+- `README.md` e `package.json` raiz permanecem somente com as alterações pré-existentes e não
+  entram em nenhum commit desta rodada.

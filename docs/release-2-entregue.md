@@ -33,6 +33,25 @@ idempotência. WhatsApp/SMS reais continuam placeholders sem SDK, rede ou creden
 O worker não imprime nome, telefone, mensagem, procedimento, observações ou resposta de provedor;
 emite somente status e contagens (`selecionados`, `enviados`, `falhas`, `duplicados`).
 
+## Garantias da rodada final de revisão
+
+- A agenda web consulta `GET /lembretes/pendencias` por hook React Query, com estados de
+  carregamento, vazio, erro/refetch e tabela/cards responsivos. Cada pendência permite retry; o
+  cache da fila é invalidado após envio.
+- A janela automática é lida por `clinica_id` na chave persistida
+  `LEMBRETES_AUTOMATICOS` de `configuracao_clinica`. O seed grava o default validado; quando não
+  há registro, o worker usa explicitamente o fallback das variáveis de ambiente. Não há tela de
+  escrita nesta release, portanto não há auditoria de escrita de configuração a registrar.
+- Manual e automático aceitam somente `AGENDADO` e `CONFIRMADO`; `FALTOU`, `ATENDIDO` e
+  `CANCELADO` são estados terminais rejeitados mesmo com contato e consentimento.
+- Enquanto o transporte roda, o claim é renovado periodicamente com o mesmo token. O timer é
+  sempre limpo e uma falha de renovação impede a finalização com claim perdido, deixando a
+  recuperação por expiração disponível. O teste PostgreSQL usa lease curto, transporte mais lento
+  e duas execuções concorrentes, provando uma chamada única.
+- A prova E2E chama `executarPassadaLembretes` (a mesma composição exportada pelo comando CLI) com
+  candidato real no PostgreSQL de teste e confirma efeito persistido; subprocesso não é usado para
+  manter o banco de teste determinístico.
+
 ## Operação
 
 Com PostgreSQL configurado, aplicar o histórico e executar uma passada:
