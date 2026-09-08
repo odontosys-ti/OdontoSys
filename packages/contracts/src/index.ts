@@ -137,17 +137,15 @@ export const SchemaCriarPaciente = z
   .superRefine(validarContatoPaciente);
 export type CriarPacienteRequest = z.infer<typeof SchemaCriarPaciente>;
 
-export const SchemaAtualizarPaciente = z
-  .object({
-    nome: z.string().min(1, 'Nome é obrigatório').optional(),
-    documento: z.string().min(11, 'Documento inválido').optional(),
-    nascimento: z.string().min(1, 'Nascimento é obrigatório').optional(),
-    observacoes: z.string().optional(),
-    telefone: SchemaTelefone.optional(),
-    canalPreferido: CanalMensagemEnum.optional(),
-    consentimentoAtivo: z.boolean().optional(),
-  })
-  .superRefine(validarContatoPaciente);
+export const SchemaAtualizarPaciente = z.object({
+  nome: z.string().min(1, 'Nome é obrigatório').optional(),
+  documento: z.string().min(11, 'Documento inválido').optional(),
+  nascimento: z.string().min(1, 'Nascimento é obrigatório').optional(),
+  observacoes: z.string().optional(),
+  telefone: SchemaTelefone.optional(),
+  canalPreferido: CanalMensagemEnum.optional(),
+  consentimentoAtivo: z.boolean().optional(),
+});
 export type AtualizarPacienteRequest = z.infer<typeof SchemaAtualizarPaciente>;
 
 export const SchemaPacienteResponse = z.object({

@@ -235,6 +235,37 @@ describe('API HTTP', () => {
     );
   });
 
+  it('reativa consentimento usando telefone e canal já persistidos', async () => {
+    const token = await login(app, 'recepcao@teste.local');
+    const { pacienteId } = await obterIds();
+
+    const contato = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/pacientes/${pacienteId}`,
+      cookies: { sessionId: token },
+      payload: {
+        telefone: '(11) 99999-8888',
+        canalPreferido: 'WHATSAPP',
+        consentimentoAtivo: false,
+      },
+    });
+    expect(contato.statusCode).toBe(200);
+
+    const reativacao = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/pacientes/${pacienteId}`,
+      cookies: { sessionId: token },
+      payload: { consentimentoAtivo: true },
+    });
+
+    expect(reativacao.statusCode).toBe(200);
+    expect(reativacao.json()).toMatchObject({
+      telefone: '11999998888',
+      canalPreferido: 'WHATSAPP',
+      consentimentoAtivo: true,
+    });
+  });
+
   it('retorna defaults seguros de contato para paciente legado', async () => {
     const token = await login(app, 'recepcao@teste.local');
     const { pacienteId } = await obterIds();

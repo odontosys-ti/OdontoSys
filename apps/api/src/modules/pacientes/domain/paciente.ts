@@ -1,5 +1,7 @@
 import type { CanalMensagem } from '@odontosys/contracts';
 
+import { AppError } from '../../../platform/erros';
+
 export type Paciente = {
   id: string;
   clinicaId: string;
@@ -29,6 +31,36 @@ export type PacienteNovo = {
 };
 
 export type PacienteAtualizacao = Partial<Omit<PacienteNovo, 'clinicaId'>>;
+
+export function validarContatoEfetivo(
+  existente: Pick<Paciente, 'telefone' | 'canalPreferido' | 'consentimentoAtivo'>,
+  dados: PacienteAtualizacao
+): void {
+  const telefone = dados.telefone ?? existente.telefone;
+  const canalPreferido = dados.canalPreferido ?? existente.canalPreferido;
+  const consentimentoAtivo = dados.consentimentoAtivo ?? existente.consentimentoAtivo;
+
+  if (!consentimentoAtivo) return;
+
+  const detalhes: Array<{ campo: string; mensagem: string }> = [];
+
+  if (!telefone) {
+    detalhes.push({
+      campo: 'telefone',
+      mensagem: 'Telefone é obrigatório quando o consentimento está ativo',
+    });
+  }
+  if (!canalPreferido) {
+    detalhes.push({
+      campo: 'canalPreferido',
+      mensagem: 'Canal preferido é obrigatório quando o consentimento está ativo',
+    });
+  }
+
+  if (detalhes.length > 0) {
+    throw new AppError('VALIDACAO_INVALIDA', detalhes);
+  }
+}
 
 export function atualizarDatasConsentimento(
   existente: Pick<Paciente, 'consentimentoAtivo' | 'consentimentoConcedidoEm'>,

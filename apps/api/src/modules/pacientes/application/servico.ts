@@ -8,6 +8,7 @@ import type {
   PacienteAtualizacao,
   PacienteNovo,
 } from '../domain/paciente';
+import { validarContatoEfetivo } from '../domain/paciente';
 import { PacienteRepository } from '../infra/paciente.repository';
 
 export function serializarPaciente(paciente: Paciente): PacienteResponse {
@@ -61,6 +62,13 @@ export class ServicoPacientes {
     id: string,
     dados: PacienteAtualizacao
   ): Promise<Paciente> {
+    const existente = await this.repo.obterPorId(clinicaId, id);
+    if (!existente) {
+      throw new AppError('NAO_ENCONTRADO');
+    }
+
+    validarContatoEfetivo(existente, dados);
+
     const atualizado = await this.repo.atualizar(clinicaId, id, dados, usuarioId);
     if (!atualizado) {
       throw new AppError('NAO_ENCONTRADO');
