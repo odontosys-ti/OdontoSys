@@ -40,6 +40,10 @@ export type ContextoEnvioLembrete = {
   consentimentoAtivo: boolean;
 };
 
+export type ContextoAutomaticoLembrete = ContextoEnvioLembrete & {
+  solicitadoPor: string;
+};
+
 export type ResultadoTransporte = {
   status: StatusLembrete;
   providerId: string | null;
@@ -99,6 +103,10 @@ export interface ILembreteRepository {
   reivindicar(entrada: EntradaReivindicacaoLembrete): Promise<ReivindicacaoLembrete>;
   finalizar(entrada: ResultadoPersistenciaLembrete): Promise<Lembrete>;
   listarPendencias(clinicaId: string, pagina: number, tamanho: number): Promise<ListaLembretes>;
+}
+
+export interface ILembreteAutomaticoRepository extends ILembreteRepository {
+  listarContextosAutomaticos(de: Date, ate: Date): Promise<ContextoAutomaticoLembrete[]>;
 }
 
 const MENSAGENS_FALHA_SEGURAS = Object.freeze({

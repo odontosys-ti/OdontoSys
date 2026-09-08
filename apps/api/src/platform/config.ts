@@ -57,6 +57,16 @@ const SchemaEnv = z.object({
     .default(false),
   LOG_LEVEL: z.string().min(1).default('info'),
   LEMBRETE_TRANSPORTE: z.enum(['simulacao', 'whatsapp', 'sms']).optional(),
+  LEMBRETE_AUTOMATICO_TOLERANCIA_MINUTOS: z.coerce.number().int().min(0).max(60).default(5),
+  LEMBRETE_AUTOMATICO_INICIO: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/)
+    .default('08:00'),
+  LEMBRETE_AUTOMATICO_FIM: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/)
+    .default('18:00'),
+  LEMBRETE_AUTOMATICO_LIMITE: z.coerce.number().int().positive().max(1000).default(100),
   WHATSAPP_API_URL: z.url().optional(),
   WHATSAPP_API_TOKEN: z.string().min(1).optional(),
   SMS_API_URL: z.url().optional(),

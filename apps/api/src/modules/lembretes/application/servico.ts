@@ -3,6 +3,7 @@ import type { LembreteResponse } from '@odontosys/contracts';
 import { AppError } from '../../../platform/erros';
 import { paraIso } from '../../../platform/http/datas';
 import {
+  type ContextoEnvioLembrete,
   type ILembreteRepository,
   type ITeletransporte,
   type Lembrete,
@@ -50,28 +51,60 @@ export class ServicoLembretes {
     const contexto = await this.repo.obterContextoEnvio(clinicaId, agendamentoId);
     if (!contexto) throw new AppError('NAO_ENCONTRADO');
 
+    const resultado = await this.processar(contexto, 'MANUAL', usuarioId);
+    if (resultado.tipo === 'IDEMPOTENTE') return resultado.lembrete;
+    if (resultado.tipo === 'EM_PROCESSAMENTO') {
+      throw new AppError('REGRA_NEGOCIO', [
+        { campo: 'lembrete', mensagem: 'O envio deste lembrete já está em processamento.' },
+      ]);
+    }
+    return resultado.lembrete;
+  }
+
+  async enviarAutomatico(
+    contexto: ContextoEnvioLembrete & { solicitadoPor: string },
+    janela: 'VINTE_E_QUATRO_HORAS' | 'QUARENTA_E_OITO_HORAS'
+  ) {
+    const resultado = await this.processar(contexto, janela, contexto.solicitadoPor);
+    if (resultado.tipo === 'IDEMPOTENTE') {
+      return { tipo: 'DUPLICADO' as const, lembrete: resultado.lembrete };
+    }
+    if (resultado.tipo === 'EM_PROCESSAMENTO') {
+      return { tipo: 'DUPLICADO' as const, lembrete: resultado.lembrete };
+    }
+    return {
+      tipo: resultado.lembrete.status === 'FALHOU' ? ('FALHOU' as const) : ('ENVIADO' as const),
+      lembrete: resultado.lembrete,
+    };
+  }
+
+  private async processar(
+    contexto: ContextoEnvioLembrete,
+    janela: 'MANUAL' | 'VINTE_E_QUATRO_HORAS' | 'QUARENTA_E_OITO_HORAS',
+    usuarioId: string
+  ) {
     validarElegibilidadeLembrete(contexto);
     if (contexto.canalPreferido === null || contexto.telefone === null) {
       throw new AppError('REGRA_NEGOCIO');
     }
     const canalElegivel = contexto.canalPreferido;
     const telefoneElegivel = contexto.telefone;
-    const idempotenciaKey = chaveLogicaLembrete(agendamentoId, 'MANUAL', canalElegivel);
+    const idempotenciaKey = chaveLogicaLembrete(contexto.agendamentoId, janela, canalElegivel);
     const reivindicacao = await this.repo.reivindicar({
-      clinicaId,
-      agendamentoId,
+      clinicaId: contexto.clinicaId,
+      agendamentoId: contexto.agendamentoId,
       pacienteId: contexto.pacienteId,
       canal: canalElegivel,
-      janela: 'MANUAL',
+      janela,
       transporte: this.transporte.nome,
       solicitadoPor: usuarioId,
       idempotenciaKey,
     });
-    if (reivindicacao.tipo === 'IDEMPOTENTE') return reivindicacao.lembrete;
+    if (reivindicacao.tipo === 'IDEMPOTENTE') {
+      return { tipo: 'IDEMPOTENTE' as const, lembrete: reivindicacao.lembrete };
+    }
     if (reivindicacao.tipo === 'EM_PROCESSAMENTO') {
-      throw new AppError('REGRA_NEGOCIO', [
-        { campo: 'lembrete', mensagem: 'O envio deste lembrete já está em processamento.' },
-      ]);
+      return { tipo: 'EM_PROCESSAMENTO' as const, lembrete: reivindicacao.lembrete };
     }
 
     const mensagem = montarMensagemLembrete({
@@ -92,18 +125,18 @@ export class ServicoLembretes {
     }
 
     const persistido = await this.repo.finalizar({
-      clinicaId,
-      agendamentoId,
+      clinicaId: contexto.clinicaId,
+      agendamentoId: contexto.agendamentoId,
       pacienteId: contexto.pacienteId,
       canal: canalElegivel,
-      janela: 'MANUAL',
+      janela,
       transporte: this.transporte.nome,
       resultado,
       solicitadoPor: usuarioId,
       claimToken: reivindicacao.claimToken,
       lembreteId: reivindicacao.lembrete.id,
     });
-    return persistido;
+    return { tipo: 'FINALIZADO' as const, lembrete: persistido };
   }
 
   async listarPendencias(clinicaId: string, pagina: number, tamanho: number) {

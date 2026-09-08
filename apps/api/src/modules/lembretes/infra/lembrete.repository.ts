@@ -1,4 +1,4 @@
-import { and, count, desc, eq, isNull, lte, or } from 'drizzle-orm';
+import { and, count, desc, eq, gte, isNull, lte, or } from 'drizzle-orm';
 
 import { registrarAuditoria } from '../../../platform/auditoria/service';
 import { db } from '../../../platform/db';
@@ -6,9 +6,11 @@ import { agendamento, clinica, lembrete, paciente } from '../../../platform/db/s
 import { criarUuidV7 } from '../../../platform/uuid';
 import {
   sanitizarResultadoTransporte,
+  type ContextoAutomaticoLembrete,
   type ContextoEnvioLembrete,
   type EntradaReivindicacaoLembrete,
   type ILembreteRepository,
+  type ILembreteAutomaticoRepository,
   type Lembrete,
   type ListaLembretes,
   type ResultadoPersistenciaLembrete,
@@ -39,7 +41,7 @@ function mapear(linha: typeof lembrete.$inferSelect): Lembrete {
   };
 }
 
-export class LembreteRepository implements ILembreteRepository {
+export class LembreteRepository implements ILembreteRepository, ILembreteAutomaticoRepository {
   async obterContextoEnvio(
     clinicaId: string,
     agendamentoId: string
@@ -63,6 +65,29 @@ export class LembreteRepository implements ILembreteRepository {
       .where(and(eq(agendamento.id, agendamentoId), eq(agendamento.clinicaId, clinicaId)))
       .limit(1);
     return linhas[0] ?? null;
+  }
+
+  async listarContextosAutomaticos(de: Date, ate: Date): Promise<ContextoAutomaticoLembrete[]> {
+    const linhas = await db()
+      .select({
+        agendamentoId: agendamento.id,
+        clinicaId: agendamento.clinicaId,
+        pacienteId: paciente.id,
+        inicio: agendamento.inicio,
+        statusAgendamento: agendamento.status,
+        fusoHorario: clinica.fusoHorario,
+        nomePaciente: paciente.nome,
+        telefone: paciente.telefone,
+        canalPreferido: paciente.canalPreferido,
+        consentimentoAtivo: paciente.consentimentoAtivo,
+        solicitadoPor: agendamento.criadoPor,
+      })
+      .from(agendamento)
+      .innerJoin(paciente, eq(paciente.id, agendamento.pacienteId))
+      .innerJoin(clinica, eq(clinica.id, agendamento.clinicaId))
+      .where(and(gte(agendamento.inicio, de), lte(agendamento.inicio, ate)))
+      .orderBy(agendamento.inicio);
+    return linhas;
   }
 
   async reivindicar(entrada: EntradaReivindicacaoLembrete): Promise<ReivindicacaoLembrete> {
