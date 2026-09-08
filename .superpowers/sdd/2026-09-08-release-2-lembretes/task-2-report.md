@@ -92,3 +92,78 @@ Implementado na branch `release-2`, preservando as alterações pré-existentes 
 - O build mantém o aviso conhecido de bundle web acima de 500 kB.
 - A única pendência de qualidade é o `pnpm lint` global bloqueado pelos dois arquivos pré-existentes
   de documentação/formatação mencionados acima.
+
+## Apêndice — rodada de correções da revisão
+
+### Status
+
+Correções implementadas e verificadas na branch `release-2`. As alterações pré-existentes em
+`README.md` e `package.json` permanecem fora dos commits desta rodada.
+
+### Proveniência dos commits
+
+- Implementação original da Task 2: `746e22c feat(lembretes): entrega envio manual simulado por canal`.
+- Relatório original da Task 2: `82b37e2 docs(lembretes): registra relatorio da task 2`.
+- Implementação desta rodada de revisão: `0656956 fix(lembretes): claim manual dispatch safely`.
+- Este apêndice é uma alteração documental separada, aplicada depois de `0656956`, para manter
+  explícita a distinção entre o commit de código e o commit do relatório; a identificação exata
+  do commit documental pode ser conferida imediatamente após `0656956` no histórico da branch.
+
+### Correções entregues
+
+1. **Claim transacional e idempotência:** a tabela `lembrete` ganhou `em_processamento`,
+   `claim_token` e `claim_expira_em` na migração `0007_giant_silk_fever.sql`. O repositório faz
+   `SELECT ... FOR UPDATE`, cria/reivindica a chave lógica em uma transação e só retorna o claim
+   antes do despacho. Inserções concorrentes usam `ON CONFLICT DO NOTHING` e releitura bloqueada.
+   Claims ativos são recusados sem novo despacho; claims expirados podem ser recuperados. A
+   finalização exige id e token do claim atual, evitando que um worker antigo sobrescreva um retry.
+   A lista de pendências exclui claims em processamento.
+2. **Idempotência no transporte:** `ITeletransporte` recebe `idempotenciaKey` explicitamente.
+   O simulador memoriza resultados enviados por chave e os placeholders reais recebem a mesma
+   entrada, sem SDK, credencial ou chamada externa. Isso permite que o fornecedor futuro faça a
+   deduplicação após uma resposta do provedor seguida de falha de persistência local.
+3. **Falhas seguras:** códigos são reduzidos a uma whitelist e cada código tem mensagem segura.
+   A normalização ocorre antes da persistência e novamente na serialização, removendo provider id
+   e texto bruto em falhas legadas ou respostas inesperadas.
+4. **Composição:** `ServicoLembretes` depende somente de `ILembreteRepository` e
+   `ITeletransporte`. A rota compõe `LembreteRepository` e `criarTransporteLembrete`, preservando
+   o comportamento HTTP e mantendo o simulador como padrão fora de produção.
+5. **Isolamento e integração:** o teste HTTP agora cria agendamento real em uma segunda clínica,
+   valida `404` para a primeira clínica e cria falhas reais em ambas para provar a lista isolada.
+   `lembretes.integration.spec.ts` usa PostgreSQL para provar persistência `FALHOU`, sanitização,
+   retry no mesmo registro, auditoria `CRIAR`/`EDITAR`, claim concorrente e recuperação de claim
+   expirado.
+6. **Contrato e web:** `SchemaSolicitarLembreteManual` é validado na fronteira POST mesmo sem
+   corpo; a web mostra o estado de pendência e a ação `Tentar envio novamente`, coberta por teste.
+
+### TDD e verificações desta rodada
+
+#### RED
+
+- A execução inicial dos testes adicionados falhou em quatro casos de API: campo de idempotência
+  ausente no simulador, sanitização inexistente, auditoria de claim ausente e concorrência sem
+  bloqueio.
+- O teste web novo falhou porque a resposta `FALHOU` ainda não oferecia a ação de retry.
+
+#### GREEN
+
+- API focada (`lembretes.domain`, `lembretes.integration`, `http`): `40/40`.
+- Web focada (`pages.spec.tsx`): `16/16`.
+- Suíte API completa: `65/65` em `11` arquivos.
+- Suíte web completa: `37/37` em `4` arquivos.
+- `pnpm type-check`: passou em contracts, API e web.
+- `pnpm build`: passou em contracts, API e web; permanece apenas o aviso conhecido de bundle web
+  acima de 500 kB.
+- ESLint focado e Prettier focado: passaram.
+- `git diff --cached --check`: passou antes do commit `0656956`.
+- `pnpm lint` global continua bloqueado somente por formatação pré-existente em `README.md` e
+  `.superpowers/sdd/2026-09-08-release-2-lembretes/progress.md`; nenhum dos dois foi alterado.
+
+### Concerns residuais
+
+- A garantia contra duplicata após sucesso do provedor e falha local depende de o adaptador real
+  encaminhar e o provedor respeitar `idempotenciaKey`; os adaptadores reais continuam placeholders
+  seguros nesta tarefa.
+- O lease de claim é de 30 segundos. Um processo interrompido pode manter a linha invisível da
+  lista de pendências até o lease expirar, após o que o próximo pedido recupera a tentativa.
+- O worker automático de lembretes de 24/48 horas permanece fora do escopo da Task 2.
