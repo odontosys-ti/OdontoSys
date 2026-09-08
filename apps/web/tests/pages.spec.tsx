@@ -245,20 +245,23 @@ describe('páginas da base', () => {
   });
 
   it('informa falha no envio manual de lembrete', async () => {
+    let tentativas = 0;
     const requisicao = vi.fn((entrada: string | URL | Request, init?: RequestInit) => {
       const url = String(entrada);
       if (init?.method === 'POST' && url.includes('/lembrete')) {
+        tentativas += 1;
+        const falhou = tentativas === 1;
         return resposta({
           id: '01900000-0000-7000-8000-000000000005',
           agendamentoId: id.agendamento,
           pacienteId: id.paciente,
           canal: 'WHATSAPP',
           janela: 'MANUAL',
-          status: 'FALHOU',
+          status: falhou ? 'FALHOU' : 'ENVIADO',
           transporte: 'simulacao',
-          providerId: null,
-          codigoFalha: 'SIMULADOR_FALHA',
-          mensagemFalha: 'Não foi possível concluir o envio do lembrete.',
+          providerId: falhou ? null : 'simulacao-1',
+          codigoFalha: falhou ? 'SIMULADOR_FALHA' : null,
+          mensagemFalha: falhou ? 'Não foi possível concluir o envio do lembrete.' : null,
           criadoEm: dataBase.criadoEm,
           atualizadoEm: dataBase.atualizadoEm,
         });
@@ -272,9 +275,13 @@ describe('páginas da base', () => {
     fireEvent.click((await screen.findAllByRole('button', { name: 'Enviar lembrete' }))[0]);
 
     expect(await screen.findByText('Lembrete pendente de nova tentativa.')).toBeInTheDocument();
-    expect(
-      await screen.findAllByRole('button', { name: 'Tentar envio novamente' })
-    ).not.toHaveLength(0);
+    const tentarNovamente = await screen.findAllByRole('button', {
+      name: 'Tentar envio novamente',
+    });
+    fireEvent.click(tentarNovamente[0]);
+
+    expect(await screen.findByText('Lembrete enviado.')).toBeInTheDocument();
+    expect(requisicao.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(2);
   });
 
   it('exibe somente a ação compatível com agendamento confirmado', async () => {
