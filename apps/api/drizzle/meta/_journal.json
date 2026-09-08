@@ -29,6 +29,34 @@
       "when": 1788287507736,
       "tag": "0003_corrige_conflito_status",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1788888182077,
+      "tag": "0004_thin_scalphunter",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1788888374401,
+      "tag": "0005_material_menace",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788889986805,
+      "tag": "0006_fluffy_karma",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788891553544,
+      "tag": "0007_giant_silk_fever",
+      "breakpoints": true
     }
   ]
 }

@@ -4,8 +4,12 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { criarApp } from '../src/platform/http/app';
 import { db } from '../src/platform/db';
 import { eq } from 'drizzle-orm';
-import { registroAuditoria } from '../src/platform/db/schema';
-import { limparBanco, login, semearClinica } from './helpers';
+import { lembrete, paciente, registroAuditoria } from '../src/platform/db/schema';
+import { SchemaLembreteResponse, SchemaListaLembretes } from '@odontosys/contracts';
+import { limparBanco, login, semearClinica, semearClinicaSecundaria } from './helpers';
+import { ServicoLembretes } from '../src/modules/lembretes/application/servico';
+import { LembreteRepository } from '../src/modules/lembretes/infra/lembrete.repository';
+import { SimuladorTransporte } from '../src/modules/lembretes/infra/transportes';
 
 describe('API HTTP', () => {
   let app: FastifyInstance;
@@ -183,6 +187,152 @@ describe('API HTTP', () => {
     const acoes = registros.map((r) => r.acao);
     expect(acoes).toContain('CRIAR');
     expect(acoes).toContain('EDITAR');
+  });
+
+  it('atualiza contato, concede e revoga consentimento com auditoria sem dados pessoais', async () => {
+    const token = await login(app, 'recepcao@teste.local');
+    const { pacienteId } = await obterIds();
+
+    const atualizacao = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/pacientes/${pacienteId}`,
+      cookies: { sessionId: token },
+      payload: {
+        telefone: '(11) 99999-8888',
+        canalPreferido: 'WHATSAPP',
+        consentimentoAtivo: true,
+      },
+    });
+
+    expect(atualizacao.statusCode).toBe(200);
+    expect(atualizacao.json()).toMatchObject({
+      telefone: '11999998888',
+      canalPreferido: 'WHATSAPP',
+      consentimentoAtivo: true,
+      consentimentoRevogadoEm: null,
+    });
+    expect(atualizacao.json().consentimentoConcedidoEm).toEqual(expect.any(String));
+
+    const revogacao = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/pacientes/${pacienteId}`,
+      cookies: { sessionId: token },
+      payload: { consentimentoAtivo: false },
+    });
+
+    expect(revogacao.statusCode).toBe(200);
+    expect(revogacao.json()).toMatchObject({
+      telefone: '11999998888',
+      canalPreferido: 'WHATSAPP',
+      consentimentoAtivo: false,
+      consentimentoConcedidoEm: expect.any(String),
+    });
+    expect(revogacao.json().consentimentoRevogadoEm).toEqual(expect.any(String));
+
+    const registros = await db()
+      .select()
+      .from(registroAuditoria)
+      .where(eq(registroAuditoria.entidadeId, pacienteId));
+    expect(registros).toHaveLength(2);
+    expect(registros.every((registro) => !JSON.stringify(registro).includes('11999998888'))).toBe(
+      true
+    );
+  });
+
+  it('reativa consentimento usando telefone e canal já persistidos', async () => {
+    const token = await login(app, 'recepcao@teste.local');
+    const { pacienteId } = await obterIds();
+
+    const contato = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/pacientes/${pacienteId}`,
+      cookies: { sessionId: token },
+      payload: {
+        telefone: '(11) 99999-8888',
+        canalPreferido: 'WHATSAPP',
+        consentimentoAtivo: false,
+      },
+    });
+    expect(contato.statusCode).toBe(200);
+
+    const reativacao = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/pacientes/${pacienteId}`,
+      cookies: { sessionId: token },
+      payload: { consentimentoAtivo: true },
+    });
+
+    expect(reativacao.statusCode).toBe(200);
+    expect(reativacao.json()).toMatchObject({
+      telefone: '11999998888',
+      canalPreferido: 'WHATSAPP',
+      consentimentoAtivo: true,
+    });
+  });
+
+  it('retorna defaults seguros de contato para paciente legado', async () => {
+    const token = await login(app, 'recepcao@teste.local');
+    const { pacienteId } = await obterIds();
+
+    const resposta = await app.inject({
+      method: 'GET',
+      url: `/api/v1/pacientes/${pacienteId}`,
+      cookies: { sessionId: token },
+    });
+
+    expect(resposta.statusCode).toBe(200);
+    expect(resposta.json()).toMatchObject({
+      telefone: null,
+      canalPreferido: null,
+      consentimentoAtivo: false,
+      consentimentoConcedidoEm: null,
+      consentimentoRevogadoEm: null,
+    });
+  });
+
+  it('rejeita contato inválido e consentimento ativo sem dados obrigatórios', async () => {
+    const token = await login(app, 'recepcao@teste.local');
+    const { pacienteId } = await obterIds();
+
+    const telefoneInvalido = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/pacientes/${pacienteId}`,
+      cookies: { sessionId: token },
+      payload: { telefone: 'abc', canalPreferido: 'TELEGRAM' },
+    });
+    expect(telefoneInvalido.statusCode).toBe(400);
+    expect(telefoneInvalido.json().erro.codigo).toBe('VALIDACAO_INVALIDA');
+
+    const consentimentoSemContato = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/pacientes/${pacienteId}`,
+      cookies: { sessionId: token },
+      payload: { consentimentoAtivo: true },
+    });
+    expect(consentimentoSemContato.statusCode).toBe(400);
+    expect(consentimentoSemContato.json()).toMatchObject({
+      erro: { codigo: 'VALIDACAO_INVALIDA' },
+      requestId: expect.any(String),
+    });
+  });
+
+  it('dentista não pode alterar contato ou consentimento', async () => {
+    const token = await login(app, 'dentista@teste.local');
+    const { pacienteId } = await obterIds();
+
+    const resposta = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/pacientes/${pacienteId}`,
+      cookies: { sessionId: token },
+      payload: {
+        telefone: '11999998888',
+        canalPreferido: 'SMS',
+        consentimentoAtivo: true,
+      },
+    });
+
+    expect(resposta.statusCode).toBe(403);
+    expect(resposta.json().erro.codigo).toBe('SEM_PERMISSAO');
   });
 
   it('RECEPCAO não cria profissional (403) e ADMIN cria e edita profissional com auditoria', async () => {
@@ -623,28 +773,278 @@ describe('API HTTP', () => {
     });
     expect(resposta.statusCode).toBe(422);
   });
+
+  it('envia lembrete manual, retorna contrato e é idempotente para sucesso', async () => {
+    const recepcao = await login(app, 'recepcao@teste.local');
+    const ids = await obterIds();
+    await habilitarContato(app, ids.pacienteId, recepcao);
+    const criado = await criarAgendamento(app, recepcao, ids.pacienteId, ids.profissionalId);
+    const agendamentoId = criado.json().id as string;
+
+    const primeiro = await app.inject({
+      method: 'POST',
+      url: `/api/v1/agendamentos/${agendamentoId}/lembrete`,
+      cookies: { sessionId: recepcao },
+    });
+    expect(primeiro.statusCode).toBe(200);
+    expect(SchemaLembreteResponse.parse(primeiro.json())).toMatchObject({
+      agendamentoId,
+      janela: 'MANUAL',
+      status: 'ENVIADO',
+      transporte: 'simulacao',
+    });
+
+    const segundo = await app.inject({
+      method: 'POST',
+      url: `/api/v1/agendamentos/${agendamentoId}/lembrete`,
+      cookies: { sessionId: recepcao },
+    });
+    expect(segundo.statusCode).toBe(200);
+    expect(segundo.json().id).toBe(primeiro.json().id);
+
+    const registros = await db()
+      .select()
+      .from(lembrete)
+      .where(eq(lembrete.agendamentoId, agendamentoId));
+    expect(registros).toHaveLength(1);
+    const auditorias = await db()
+      .select()
+      .from(registroAuditoria)
+      .where(eq(registroAuditoria.entidadeId, primeiro.json().id as string));
+    expect(auditorias.map((item) => item.acao)).toEqual(
+      expect.arrayContaining(['CRIAR', 'EDITAR'])
+    );
+    expect(JSON.stringify(auditorias[0])).not.toContain('5511999998888');
+  });
+
+  it('lista somente pendências da clínica e valida o envelope compartilhado', async () => {
+    const recepcao = await login(app, 'recepcao@teste.local');
+    const dentista = await login(app, 'dentista@teste.local');
+    const ids = await obterIds();
+    await habilitarContato(app, ids.pacienteId, recepcao);
+    const falho = await criarAgendamento(app, recepcao, ids.pacienteId, ids.profissionalId);
+    const falhoId = falho.json().id as string;
+    const transporteFalho = new SimuladorTransporte(true);
+    const servico = new ServicoLembretes(new LembreteRepository(), transporteFalho);
+    await servico.solicitarManual(ids.clinicaId, ids.recepcaoId, falhoId);
+    const segunda = await semearClinicaSecundaria();
+    await servico.solicitarManual(segunda.clinicaId, segunda.recepcaoId, segunda.agendamentoId);
+
+    const negadoDentista = await app.inject({
+      method: 'GET',
+      url: '/api/v1/lembretes/pendencias',
+      cookies: { sessionId: dentista },
+    });
+    expect(negadoDentista.statusCode).toBe(403);
+
+    const lista = await app.inject({
+      method: 'GET',
+      url: '/api/v1/lembretes/pendencias?pagina=1&tamanho=10',
+      cookies: { sessionId: recepcao },
+    });
+    expect(lista.statusCode).toBe(200);
+    expect(SchemaListaLembretes.parse(lista.json())).toMatchObject({
+      dados: [expect.objectContaining({ agendamentoId: falhoId, status: 'FALHOU' })],
+      paginacao: { pagina: 1, tamanho: 10, total: 1 },
+    });
+    expect(lista.json().dados).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ agendamentoId: segunda.agendamentoId })])
+    );
+
+    const negadoEnvio = await app.inject({
+      method: 'POST',
+      url: `/api/v1/agendamentos/${ids.pacienteId}/lembrete`,
+      cookies: { sessionId: dentista },
+    });
+    expect(negadoEnvio.statusCode).toBe(403);
+  });
+
+  it('repete pendência automática pelo registro persistido sem criar lembrete manual', async () => {
+    const recepcao = await login(app, 'recepcao@teste.local');
+    const ids = await obterIds();
+    await habilitarContato(app, ids.pacienteId, recepcao);
+    await db()
+      .update(paciente)
+      .set({ canalPreferido: 'SMS' })
+      .where(eq(paciente.id, ids.pacienteId));
+    const criado = await criarAgendamento(app, recepcao, ids.pacienteId, ids.profissionalId);
+    const agendamentoId = criado.json().id as string;
+    const repo = new LembreteRepository();
+    const contexto = await repo.obterContextoEnvio(ids.clinicaId, agendamentoId);
+    if (!contexto) throw new Error('contexto de teste ausente');
+
+    const primeira = await new ServicoLembretes(
+      repo,
+      new SimuladorTransporte(true)
+    ).enviarAutomatico({ ...contexto, solicitadoPor: ids.recepcaoId }, 'VINTE_E_QUATRO_HORAS');
+    expect(primeira.tipo).toBe('FALHOU');
+
+    const segunda = await app.inject({
+      method: 'POST',
+      url: `/api/v1/lembretes/${primeira.lembrete.id}/retry`,
+      cookies: { sessionId: recepcao },
+    });
+
+    expect(segunda.statusCode).toBe(200);
+    expect(SchemaLembreteResponse.parse(segunda.json())).toMatchObject({
+      id: primeira.lembrete.id,
+      agendamentoId,
+      janela: 'VINTE_E_QUATRO_HORAS',
+      status: 'ENVIADO',
+    });
+    const registros = await db()
+      .select()
+      .from(lembrete)
+      .where(eq(lembrete.agendamentoId, agendamentoId));
+    expect(registros).toHaveLength(1);
+    expect(registros[0]?.janela).toBe('VINTE_E_QUATRO_HORAS');
+  });
+
+  it('rejeita envio sem consentimento, agendamento cancelado e outra clínica', async () => {
+    const recepcao = await login(app, 'recepcao@teste.local');
+    const ids = await obterIds();
+    const semContato = await criarAgendamento(app, recepcao, ids.pacienteId, ids.profissionalId);
+
+    const semConsentimento = await app.inject({
+      method: 'POST',
+      url: `/api/v1/agendamentos/${semContato.json().id as string}/lembrete`,
+      cookies: { sessionId: recepcao },
+    });
+    expect(semConsentimento.statusCode).toBe(422);
+
+    await habilitarContato(app, ids.pacienteId, recepcao);
+    const cancelado = await criarAgendamento(app, recepcao, ids.pacienteId, ids.profissionalId);
+    const cancelamento = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/agendamentos/${cancelado.json().id as string}`,
+      cookies: { sessionId: recepcao },
+    });
+    expect(cancelamento.statusCode).toBe(200);
+
+    const envioCancelado = await app.inject({
+      method: 'POST',
+      url: `/api/v1/agendamentos/${cancelado.json().id as string}/lembrete`,
+      cookies: { sessionId: recepcao },
+    });
+    expect(envioCancelado.statusCode).toBe(422);
+
+    const faltou = await criarAgendamento(app, recepcao, ids.pacienteId, ids.profissionalId);
+    const marcarFalta = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/agendamentos/${faltou.json().id as string}/status`,
+      cookies: { sessionId: recepcao },
+      payload: { status: 'FALTOU' },
+    });
+    expect(marcarFalta.statusCode).toBe(200);
+    const envioFaltou = await app.inject({
+      method: 'POST',
+      url: `/api/v1/agendamentos/${faltou.json().id as string}/lembrete`,
+      cookies: { sessionId: recepcao },
+    });
+    expect(envioFaltou.statusCode).toBe(422);
+
+    const atendido = await criarAgendamento(app, recepcao, ids.pacienteId, ids.profissionalId);
+    const confirmar = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/agendamentos/${atendido.json().id as string}/status`,
+      cookies: { sessionId: recepcao },
+      payload: { status: 'CONFIRMADO' },
+    });
+    expect(confirmar.statusCode).toBe(200);
+    const marcarAtendido = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/agendamentos/${atendido.json().id as string}/status`,
+      cookies: { sessionId: recepcao },
+      payload: { status: 'ATENDIDO' },
+    });
+    expect(marcarAtendido.statusCode).toBe(200);
+    const envioAtendido = await app.inject({
+      method: 'POST',
+      url: `/api/v1/agendamentos/${atendido.json().id as string}/lembrete`,
+      cookies: { sessionId: recepcao },
+    });
+    expect(envioAtendido.statusCode).toBe(422);
+
+    const segunda = await semearClinicaSecundaria();
+    const outraClinica = await app.inject({
+      method: 'POST',
+      url: `/api/v1/agendamentos/${segunda.agendamentoId}/lembrete`,
+      cookies: { sessionId: recepcao },
+    });
+    expect(outraClinica.statusCode).toBe(404);
+  });
 });
 
+async function habilitarContato(
+  app: FastifyInstance,
+  pacienteId: string,
+  token: string
+): Promise<void> {
+  const resposta = await app.inject({
+    method: 'PATCH',
+    url: `/api/v1/pacientes/${pacienteId}`,
+    cookies: { sessionId: token },
+    payload: {
+      telefone: '5511999998888',
+      canalPreferido: 'WHATSAPP',
+      consentimentoAtivo: true,
+    },
+  });
+  if (resposta.statusCode !== 200) throw new Error(`contato falhou: ${resposta.body}`);
+}
+
+async function criarAgendamento(
+  app: FastifyInstance,
+  token: string,
+  pacienteId: string,
+  profissionalId: string
+): Promise<Awaited<ReturnType<FastifyInstance['inject']>>> {
+  const deslocamento = contadorAgendamento++ * 60 * 60 * 1000;
+  const procedimento = await obterIds();
+  return app.inject({
+    method: 'POST',
+    url: '/api/v1/agendamentos',
+    cookies: { sessionId: token },
+    payload: {
+      pacienteId,
+      profissionalId,
+      procedimentoId: procedimento.procedimentoId,
+      inicio: new Date(Date.now() + 24 * 60 * 60 * 1000 + deslocamento).toISOString(),
+    },
+  });
+}
+
+let contadorAgendamento = 0;
+
 async function obterIds(): Promise<{
+  clinicaId: string;
+  recepcaoId: string;
   dentistaId: string;
   pacienteId: string;
   profissionalId: string;
   procedimentoId: string;
 }> {
-  const { usuario, paciente, profissional, procedimento } =
+  const { clinica, usuario, paciente, profissional, procedimento } =
     await import('../src/platform/db/schema');
   const database = db();
   const [u] = await database
     .select()
     .from(usuario)
     .where(eq(usuario.email, 'dentista@teste.local'));
+  const [recepcao] = await database
+    .select()
+    .from(usuario)
+    .where(eq(usuario.email, 'recepcao@teste.local'));
+  const [c] = await database.select().from(clinica);
   const [p] = await database.select().from(paciente);
   const [pr] = await database.select().from(profissional);
   const [pc] = await database.select().from(procedimento);
-  if (!u || !p || !pr || !pc) {
+  if (!c || !u || !recepcao || !p || !pr || !pc) {
     throw new Error('seed incompleto');
   }
   return {
+    clinicaId: c.id,
+    recepcaoId: recepcao.id,
     dentistaId: u.id,
     pacienteId: p.id,
     profissionalId: pr.id,

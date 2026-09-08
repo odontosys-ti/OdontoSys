@@ -11,6 +11,7 @@ import type {
   PacienteAtualizacao,
   PacienteNovo,
 } from '../domain/paciente';
+import { atualizarDatasConsentimento } from '../domain/paciente';
 
 function mapear(linha: typeof paciente.$inferSelect): Paciente {
   return {
@@ -20,6 +21,11 @@ function mapear(linha: typeof paciente.$inferSelect): Paciente {
     documento: linha.documento,
     nascimento: linha.nascimento,
     observacoes: linha.observacoes,
+    telefone: linha.telefone,
+    canalPreferido: linha.canalPreferido,
+    consentimentoAtivo: linha.consentimentoAtivo,
+    consentimentoConcedidoEm: linha.consentimentoConcedidoEm,
+    consentimentoRevogadoEm: linha.consentimentoRevogadoEm,
     ativo: linha.ativo,
     criadoEm: linha.criadoEm,
     atualizadoEm: linha.atualizadoEm,
@@ -77,6 +83,11 @@ export class PacienteRepository implements IPacienteRepository {
           documento: dados.documento,
           nascimento: dados.nascimento,
           observacoes: dados.observacoes,
+          telefone: dados.telefone ?? null,
+          canalPreferido: dados.canalPreferido ?? null,
+          consentimentoAtivo: dados.consentimentoAtivo ?? false,
+          consentimentoConcedidoEm: dados.consentimentoAtivo ? agora : null,
+          consentimentoRevogadoEm: null,
           ativo: true,
           criadoEm: agora,
           atualizadoEm: agora,
@@ -113,9 +124,11 @@ export class PacienteRepository implements IPacienteRepository {
       if (!existente) {
         return null;
       }
+      const agora = new Date();
+      const datasConsentimento = atualizarDatasConsentimento(existente, dados, agora);
       const [linha] = await tx
         .update(paciente)
-        .set({ ...dados, atualizadoEm: new Date() })
+        .set({ ...dados, ...datasConsentimento, atualizadoEm: agora })
         .where(and(eq(paciente.id, id), eq(paciente.clinicaId, clinicaId)))
         .returning();
       if (!linha) {

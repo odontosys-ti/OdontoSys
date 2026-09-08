@@ -3,6 +3,7 @@ import {
   SchemaCriarPaciente,
   SchemaListaPacientes,
   SchemaPacienteResponse,
+  normalizarTelefone,
   type AtualizarPacienteRequest,
   type CriarPacienteRequest,
 } from '@odontosys/contracts';
@@ -34,6 +35,7 @@ export function useSalvarPaciente(id: string | undefined) {
       const entrada = id
         ? SchemaAtualizarPaciente.parse(payload)
         : SchemaCriarPaciente.parse(payload);
+      if (entrada.telefone) entrada.telefone = normalizarTelefone(entrada.telefone);
       return api(id ? `/pacientes/${id}` : '/pacientes', SchemaPacienteResponse, {
         method: id ? 'PATCH' : 'POST',
         body: JSON.stringify(entrada),

@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactElement } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router';
+import type { CanalMensagem } from '@odontosys/contracts';
 
 import { papelPermite, useSessao } from '../../shared/api/hooks';
 import {
@@ -11,6 +12,7 @@ import {
   Input,
   MobileCard,
   PageHeader,
+  Select,
   Spinner,
   Table,
   Textarea,
@@ -164,6 +166,9 @@ export function PaginaPacienteFormulario(): ReactElement {
   const [documento, setDocumento] = useState('');
   const [nascimento, setNascimento] = useState('');
   const [observacoes, setObservacoes] = useState('');
+  const [telefone, setTelefone] = useState('');
+  const [canalPreferido, setCanalPreferido] = useState<CanalMensagem | ''>('');
+  const [consentimentoAtivo, setConsentimentoAtivo] = useState(false);
 
   useEffect(() => {
     if (!consulta.data) return;
@@ -171,6 +176,9 @@ export function PaginaPacienteFormulario(): ReactElement {
     setDocumento(consulta.data.documento);
     setNascimento(consulta.data.nascimento.slice(0, 10));
     setObservacoes(consulta.data.observacoes);
+    setTelefone(consulta.data.telefone ?? '');
+    setCanalPreferido(consulta.data.canalPreferido ?? '');
+    setConsentimentoAtivo(consulta.data.consentimentoAtivo);
   }, [consulta.data]);
 
   if (sessao.data && !papelPermite(sessao.data.papel, ['RECEPCAO', 'ADMIN'])) {
@@ -207,6 +215,9 @@ export function PaginaPacienteFormulario(): ReactElement {
                 documento,
                 nascimento: new Date(`${nascimento}T00:00:00.000Z`).toISOString(),
                 observacoes,
+                telefone: telefone.trim() ? telefone : undefined,
+                canalPreferido: canalPreferido || undefined,
+                consentimentoAtivo,
               },
               {
                 onSuccess: () => {
@@ -245,6 +256,38 @@ export function PaginaPacienteFormulario(): ReactElement {
               />
             </Field>
           </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field
+              label="Telefone para mensagens"
+              dica="Use DDD; a aplicação salva somente os dígitos."
+            >
+              <Input
+                value={telefone}
+                onChange={(evento) => setTelefone(evento.target.value)}
+                inputMode="tel"
+                required={consentimentoAtivo}
+              />
+            </Field>
+            <Field label="Canal preferido">
+              <Select
+                value={canalPreferido}
+                onChange={(evento) => setCanalPreferido(evento.target.value as CanalMensagem | '')}
+                required={consentimentoAtivo}
+              >
+                <option value="">Selecione um canal</option>
+                <option value="WHATSAPP">WhatsApp</option>
+                <option value="SMS">SMS</option>
+              </Select>
+            </Field>
+          </div>
+          <label className="flex items-center gap-3 text-sm font-semibold text-ink-700">
+            <input
+              type="checkbox"
+              checked={consentimentoAtivo}
+              onChange={(evento) => setConsentimentoAtivo(evento.target.checked)}
+            />
+            Consentimento para receber mensagens
+          </label>
           <Field
             label="Observações gerais"
             dica="Não registre informações além do necessário para o cadastro base."

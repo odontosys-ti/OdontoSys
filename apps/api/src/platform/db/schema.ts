@@ -21,6 +21,13 @@ export const statusAgendamentoEnum = pgEnum('status_agendamento', [
   'ATENDIDO',
   'CANCELADO',
 ]);
+export const canalMensagemEnum = pgEnum('canal_mensagem', ['WHATSAPP', 'SMS']);
+export const janelaLembreteEnum = pgEnum('janela_lembrete', [
+  'MANUAL',
+  'VINTE_E_QUATRO_HORAS',
+  'QUARENTA_E_OITO_HORAS',
+]);
+export const statusLembreteEnum = pgEnum('status_lembrete', ['ENVIADO', 'ENTREGUE', 'FALHOU']);
 export const acaoAuditoriaEnum = pgEnum('acao_auditoria', ['CRIAR', 'EDITAR', 'DELETAR']);
 
 const timestamps = {
@@ -85,10 +92,27 @@ export const paciente = pgTable(
     documento: text('documento').notNull(),
     nascimento: timestamp('nascimento', { withTimezone: true, mode: 'date' }).notNull(),
     observacoes: text('observacoes').notNull().default(''),
+    telefone: text('telefone'),
+    canalPreferido: canalMensagemEnum('canal_preferido'),
+    consentimentoAtivo: boolean('consentimento_ativo').notNull().default(false),
+    consentimentoConcedidoEm: timestamp('consentimento_concedido_em', {
+      withTimezone: true,
+      mode: 'date',
+    }),
+    consentimentoRevogadoEm: timestamp('consentimento_revogado_em', {
+      withTimezone: true,
+      mode: 'date',
+    }),
     ativo: boolean('ativo').notNull().default(true),
     ...timestamps,
   },
-  (table) => [index('paciente_clinica_idx').on(table.clinicaId)]
+  (table) => [
+    index('paciente_clinica_idx').on(table.clinicaId),
+    check(
+      'consentimento_ativo_requer_contato',
+      sql`NOT ${table.consentimentoAtivo} OR (${table.telefone} IS NOT NULL AND ${table.canalPreferido} IS NOT NULL)`
+    ),
+  ]
 );
 
 export const procedimento = pgTable(
@@ -134,6 +158,38 @@ export const agendamento = pgTable(
     index('agendamento_profissional_inicio_idx').on(table.profissionalId, table.inicio),
     index('agendamento_clinica_idx').on(table.clinicaId),
     check('fim_greater_than_inicio', sql`${table.fim} > ${table.inicio}`),
+  ]
+);
+
+export const lembrete = pgTable(
+  'lembrete',
+  {
+    id: uuid('id').primaryKey(),
+    clinicaId: uuid('clinica_id')
+      .notNull()
+      .references(() => clinica.id, { onDelete: 'restrict' }),
+    agendamentoId: uuid('agendamento_id')
+      .notNull()
+      .references(() => agendamento.id, { onDelete: 'restrict' }),
+    pacienteId: uuid('paciente_id')
+      .notNull()
+      .references(() => paciente.id, { onDelete: 'restrict' }),
+    canal: canalMensagemEnum('canal').notNull(),
+    janela: janelaLembreteEnum('janela').notNull(),
+    status: statusLembreteEnum('status').notNull(),
+    transporte: text('transporte').notNull(),
+    providerId: text('provider_id'),
+    codigoFalha: text('codigo_falha'),
+    mensagemFalha: text('mensagem_falha'),
+    emProcessamento: boolean('em_processamento').notNull().default(false),
+    claimToken: text('claim_token'),
+    claimExpiraEm: timestamp('claim_expira_em', { withTimezone: true, mode: 'date' }),
+    solicitadoPor: uuid('solicitado_por').references(() => usuario.id, { onDelete: 'restrict' }),
+    ...timestamps,
+  },
+  (table) => [
+    index('lembrete_clinica_status_idx').on(table.clinicaId, table.status),
+    uniqueIndex('lembrete_logical_key_unique').on(table.agendamentoId, table.janela, table.canal),
   ]
 );
 

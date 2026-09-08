@@ -27,7 +27,10 @@ import {
   useAtualizarStatusAgendamento,
   useCancelarAgendamento,
   useCriarAgendamento,
+  useEnviarLembrete,
+  usePendenciasLembretes,
   useReagendarAgendamento,
+  useRetryLembrete,
 } from './api';
 
 function formatarHorario(valor: string): string {
@@ -62,8 +65,12 @@ export function PaginaAgendamentos(): ReactElement {
   const criar = useCriarAgendamento();
   const cancelar = useCancelarAgendamento();
   const atualizarStatus = useAtualizarStatusAgendamento();
+  const enviarLembrete = useEnviarLembrete();
+  const retryLembrete = useRetryLembrete();
   const toast = useToast();
   const podeEditar = papelPermite(sessao.data?.papel, ['RECEPCAO', 'ADMIN']);
+  const [paginaPendencias, setPaginaPendencias] = useState(1);
+  const pendencias = usePendenciasLembretes(paginaPendencias, podeEditar);
 
   const [modalNovo, setModalNovo] = useState(false);
   const [pacienteId, setPacienteId] = useState('');
@@ -75,6 +82,7 @@ export function PaginaAgendamentos(): ReactElement {
   const [novoInicio, setNovoInicio] = useState('');
   const reagendar = useReagendarAgendamento(reagendando?.id);
   const [cancelando, setCancelando] = useState<AgendamentoResponse>();
+  const [lembretePendenteId, setLembretePendenteId] = useState<string | null>(null);
 
   const nomePaciente = (id: string) =>
     pacientes.data?.dados.find((item) => item.id === id)?.nome ?? `Paciente ${id.slice(0, 8)}`;
@@ -122,6 +130,160 @@ export function PaginaAgendamentos(): ReactElement {
     );
   };
 
+  const podeEnviarLembrete = (item: AgendamentoResponse): boolean => {
+    const paciente = pacientes.data?.dados.find((registro) => registro.id === item.pacienteId);
+    return (
+      podeEditar &&
+      (item.status === 'AGENDADO' || item.status === 'CONFIRMADO') &&
+      paciente?.consentimentoAtivo === true &&
+      paciente.telefone !== null &&
+      paciente.canalPreferido !== null
+    );
+  };
+
+  const solicitarLembrete = (agendamentoId: string) => {
+    enviarLembrete.mutate(agendamentoId, {
+      onSuccess: (lembrete) => {
+        setLembretePendenteId(lembrete.status === 'FALHOU' ? lembrete.agendamentoId : null);
+        toast.mostrar(
+          lembrete.status === 'FALHOU'
+            ? 'Lembrete pendente de nova tentativa.'
+            : 'Lembrete enviado.'
+        );
+      },
+    });
+  };
+
+  const tentarPendencia = (lembreteId: string) => {
+    retryLembrete.mutate(lembreteId, {
+      onSuccess: (lembrete) => {
+        toast.mostrar(
+          lembrete.status === 'FALHOU'
+            ? 'Lembrete pendente de nova tentativa.'
+            : 'Lembrete enviado.'
+        );
+      },
+    });
+  };
+
+  const renderPendencias = () => {
+    if (!podeEditar) return null;
+    if (pendencias.isLoading) {
+      return (
+        <Card className="p-4 sm:p-5">
+          <Spinner texto="Carregando pendências de lembretes…" />
+        </Card>
+      );
+    }
+    if (pendencias.isError) {
+      return (
+        <Card className="p-4 sm:p-5">
+          <ErrorState
+            mensagem="Não foi possível carregar as pendências de lembretes."
+            onRetry={() => void pendencias.refetch()}
+          />
+        </Card>
+      );
+    }
+    const itens = pendencias.data?.dados ?? [];
+    const paginacao = pendencias.data?.paginacao;
+    const totalPaginas = paginacao
+      ? Math.max(1, Math.ceil(paginacao.total / paginacao.tamanho))
+      : 1;
+    if (itens.length === 0) {
+      return (
+        <Card className="p-4 sm:p-5">
+          <h2 className="mb-3 text-lg font-semibold text-ink-900">Pendências de lembretes</h2>
+          <EmptyState
+            mensagem="Nenhuma pendência de lembrete"
+            subtitulo="Envios com falha ficam disponíveis aqui para uma nova tentativa."
+          />
+        </Card>
+      );
+    }
+    return (
+      <section className="space-y-3" aria-labelledby="pendencias-lembretes-titulo">
+        <div>
+          <h2 id="pendencias-lembretes-titulo" className="text-lg font-semibold text-ink-900">
+            Pendências de lembretes
+          </h2>
+          <p className="text-sm text-ink-600">
+            Nenhum dado pessoal é exibido nesta fila operacional.
+          </p>
+        </div>
+        <Table
+          cabecalhos={['Agendamento', 'Janela', 'Canal', 'Falha', 'Ação']}
+          mobile={itens.map((item) => (
+            <MobileCard
+              key={item.id}
+              titulo={`Agendamento ${item.agendamentoId.slice(0, 8)}`}
+              meta={`${item.janela} · ${item.canal}`}
+            >
+              <p className="text-xs text-ink-600">{item.mensagemFalha ?? 'Falha de envio.'}</p>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={retryLembrete.isPending}
+                onClick={() => tentarPendencia(item.id)}
+              >
+                Tentar envio novamente para esta pendência
+              </Button>
+            </MobileCard>
+          ))}
+        >
+          {itens.map((item) => (
+            <tr key={item.id}>
+              <td className="px-4 py-3.5 font-mono text-xs text-ink-700">
+                {item.agendamentoId.slice(0, 8)}
+              </td>
+              <td className="px-4 py-3.5 text-xs text-ink-700">{item.janela}</td>
+              <td className="px-4 py-3.5 text-xs text-ink-700">{item.canal}</td>
+              <td className="px-4 py-3.5 text-xs text-ink-700">
+                {item.mensagemFalha ?? 'Falha de envio.'}
+              </td>
+              <td className="px-4 py-3.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={retryLembrete.isPending}
+                  onClick={() => tentarPendencia(item.id)}
+                >
+                  Tentar envio novamente
+                </Button>
+              </td>
+            </tr>
+          ))}
+        </Table>
+        {paginacao && paginacao.total > 0 ? (
+          <nav
+            className="flex items-center justify-between gap-3"
+            aria-label="Paginação de pendências"
+          >
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={paginaPendencias <= 1 || pendencias.isFetching}
+              onClick={() => setPaginaPendencias((pagina) => Math.max(1, pagina - 1))}
+            >
+              Página anterior
+            </Button>
+            <span className="text-xs text-ink-600">
+              Página {paginacao.pagina} de {totalPaginas}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={paginacao.pagina >= totalPaginas || pendencias.isFetching}
+              onClick={() => setPaginaPendencias((pagina) => pagina + 1)}
+            >
+              Próxima página
+            </Button>
+          </nav>
+        ) : null}
+      </section>
+    );
+  };
+
   if (consulta.isLoading) return <Spinner texto="Carregando agendamentos…" />;
   if (consulta.isError) {
     return (
@@ -161,6 +323,28 @@ export function PaginaAgendamentos(): ReactElement {
           <Button variant="ghost" size="sm" onClick={() => mudarStatus(item, 'ATENDIDO')}>
             Marcar atendido
           </Button>
+        ) : null}
+        {podeEnviarLembrete(item) ? (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={enviarLembrete.isPending}
+              onClick={() => solicitarLembrete(item.id)}
+            >
+              {enviarLembrete.isPending ? 'Enviando…' : 'Enviar lembrete'}
+            </Button>
+            {lembretePendenteId === item.id ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={enviarLembrete.isPending}
+                onClick={() => solicitarLembrete(item.id)}
+              >
+                Tentar envio novamente
+              </Button>
+            ) : null}
+          </>
         ) : null}
       </div>
     ) : null;
@@ -232,6 +416,28 @@ export function PaginaAgendamentos(): ReactElement {
           }
         />
       ) : null}
+      {enviarLembrete.isError ? (
+        <ErrorState
+          mensagem="Não foi possível enviar o lembrete."
+          detalhe={
+            enviarLembrete.error instanceof ApiError
+              ? enviarLembrete.error.message
+              : 'Tente novamente em instantes.'
+          }
+        />
+      ) : null}
+      {retryLembrete.isError ? (
+        <ErrorState
+          mensagem="Não foi possível repetir o envio do lembrete."
+          detalhe={
+            retryLembrete.error instanceof ApiError
+              ? retryLembrete.error.message
+              : 'Tente novamente em instantes.'
+          }
+        />
+      ) : null}
+
+      {renderPendencias()}
 
       {agendamentos.length === 0 ? (
         <EmptyState

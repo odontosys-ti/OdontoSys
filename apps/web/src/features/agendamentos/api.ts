@@ -4,6 +4,8 @@ import {
   SchemaAgendamentosDiaQuery,
   SchemaAtualizarAgendamento,
   SchemaCriarAgendamento,
+  SchemaLembreteResponse,
+  SchemaListaLembretes,
   SchemaListaAgendamentos,
   type AtualizarAgendamentoRequest,
   type CriarAgendamentoRequest,
@@ -88,5 +90,40 @@ export function useAtualizarStatusAgendamento() {
       void queryClient.invalidateQueries({ queryKey: ['agendamentos'] });
       void queryClient.invalidateQueries({ queryKey: ['agendamentos-dia'] });
     },
+  });
+}
+
+export function useEnviarLembrete() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (agendamentoId: string) =>
+      api(`/agendamentos/${agendamentoId}/lembrete`, SchemaLembreteResponse, {
+        method: 'POST',
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['lembretes-pendencias'] });
+    },
+  });
+}
+
+export function useRetryLembrete() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (lembreteId: string) =>
+      api(`/lembretes/${lembreteId}/retry`, SchemaLembreteResponse, {
+        method: 'POST',
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['lembretes-pendencias'] });
+    },
+  });
+}
+
+export function usePendenciasLembretes(pagina = 1, enabled = true) {
+  const params = new URLSearchParams({ pagina: String(pagina), tamanho: '10' });
+  return useQuery({
+    queryKey: ['lembretes-pendencias', pagina],
+    enabled,
+    queryFn: () => api(`/lembretes/pendencias?${params.toString()}`, SchemaListaLembretes),
   });
 }

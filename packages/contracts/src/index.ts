@@ -76,15 +76,86 @@ export type LoginResponse = UsuarioPublico;
 export const SchemaMeResponse = SchemaUsuarioPublico;
 export type MeResponse = UsuarioPublico;
 
-export const SchemaCriarPaciente = z.object({
-  nome: z.string().min(1, 'Nome é obrigatório'),
-  documento: z.string().min(11, 'Documento inválido'),
-  nascimento: z.string().min(1, 'Nascimento é obrigatório'),
-  observacoes: z.string().optional().default(''),
+export const CanalMensagemEnum = z.enum(['WHATSAPP', 'SMS']);
+export type CanalMensagem = z.infer<typeof CanalMensagemEnum>;
+
+export const JanelaLembreteEnum = z.enum([
+  'MANUAL',
+  'VINTE_E_QUATRO_HORAS',
+  'QUARENTA_E_OITO_HORAS',
+]);
+export type JanelaLembrete = z.infer<typeof JanelaLembreteEnum>;
+
+export const StatusLembreteEnum = z.enum(['ENVIADO', 'ENTREGUE', 'FALHOU']);
+export type StatusLembrete = z.infer<typeof StatusLembreteEnum>;
+
+export function normalizarTelefone(valor: string): string {
+  return valor.replace(/\D/g, '');
+}
+
+const SchemaTelefone = z
+  .string()
+  .trim()
+  .min(1, 'Telefone é obrigatório')
+  .refine(
+    (valor) =>
+      /^[+\d\s().-]+$/.test(valor) &&
+      normalizarTelefone(valor).length >= 10 &&
+      normalizarTelefone(valor).length <= 15,
+    'Telefone inválido'
+  );
+
+const SchemaContatoPaciente = z.object({
+  telefone: SchemaTelefone.optional(),
+  canalPreferido: CanalMensagemEnum.optional(),
+  consentimentoAtivo: z.boolean().default(false),
 });
+
+function validarContatoPaciente(
+  dados: {
+    telefone?: string;
+    canalPreferido?: CanalMensagem;
+    consentimentoAtivo?: boolean;
+  },
+  contexto: z.RefinementCtx
+): void {
+  if (!dados.consentimentoAtivo) return;
+  if (!dados.telefone) {
+    contexto.addIssue({
+      code: 'custom',
+      path: ['telefone'],
+      message: 'Telefone é obrigatório quando o consentimento está ativo',
+    });
+  }
+  if (!dados.canalPreferido) {
+    contexto.addIssue({
+      code: 'custom',
+      path: ['canalPreferido'],
+      message: 'Canal preferido é obrigatório quando o consentimento está ativo',
+    });
+  }
+}
+
+export const SchemaCriarPaciente = z
+  .object({
+    nome: z.string().min(1, 'Nome é obrigatório'),
+    documento: z.string().min(11, 'Documento inválido'),
+    nascimento: z.string().min(1, 'Nascimento é obrigatório'),
+    observacoes: z.string().optional().default(''),
+    ...SchemaContatoPaciente.shape,
+  })
+  .superRefine(validarContatoPaciente);
 export type CriarPacienteRequest = z.infer<typeof SchemaCriarPaciente>;
 
-export const SchemaAtualizarPaciente = SchemaCriarPaciente.partial();
+export const SchemaAtualizarPaciente = z.object({
+  nome: z.string().min(1, 'Nome é obrigatório').optional(),
+  documento: z.string().min(11, 'Documento inválido').optional(),
+  nascimento: z.string().min(1, 'Nascimento é obrigatório').optional(),
+  observacoes: z.string().optional(),
+  telefone: SchemaTelefone.optional(),
+  canalPreferido: CanalMensagemEnum.optional(),
+  consentimentoAtivo: z.boolean().optional(),
+});
 export type AtualizarPacienteRequest = z.infer<typeof SchemaAtualizarPaciente>;
 
 export const SchemaPacienteResponse = z.object({
@@ -93,6 +164,11 @@ export const SchemaPacienteResponse = z.object({
   documento: z.string(),
   nascimento: z.string(),
   observacoes: z.string(),
+  telefone: z.string().nullable(),
+  canalPreferido: CanalMensagemEnum.nullable(),
+  consentimentoAtivo: z.boolean(),
+  consentimentoConcedidoEm: z.string().nullable(),
+  consentimentoRevogadoEm: z.string().nullable(),
   ativo: z.boolean(),
   criadoEm: z.string(),
   atualizadoEm: z.string(),
@@ -187,6 +263,29 @@ export const SchemaAgendamentoResponse = z.object({
 });
 export type AgendamentoResponse = z.infer<typeof SchemaAgendamentoResponse>;
 export const SchemaListaAgendamentos = schemaLista(SchemaAgendamentoResponse);
+
+export const SchemaSolicitarLembreteManual = z.object({}).optional();
+export type SolicitarLembreteManualRequest = z.infer<typeof SchemaSolicitarLembreteManual>;
+export const SchemaSolicitarLembreteRetry = z.object({}).optional();
+export type SolicitarLembreteRetryRequest = z.infer<typeof SchemaSolicitarLembreteRetry>;
+
+export const SchemaLembreteResponse = z.object({
+  id: z.string().uuid(),
+  agendamentoId: z.string().uuid(),
+  pacienteId: z.string().uuid(),
+  canal: CanalMensagemEnum,
+  janela: JanelaLembreteEnum,
+  status: StatusLembreteEnum,
+  transporte: z.string(),
+  providerId: z.string().nullable(),
+  codigoFalha: z.string().nullable(),
+  mensagemFalha: z.string().nullable(),
+  criadoEm: z.string(),
+  atualizadoEm: z.string(),
+});
+export type LembreteResponse = z.infer<typeof SchemaLembreteResponse>;
+export const SchemaListaLembretes = schemaLista(SchemaLembreteResponse);
+export const SchemaListarPendenciasQuery = SchemaPaginacaoQuery;
 
 export function paraJsonSchema(schema: z.ZodType): Record<string, unknown> {
   const convertido = z.toJSONSchema(schema, { target: 'draft-7' });

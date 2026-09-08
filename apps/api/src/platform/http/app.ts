@@ -6,6 +6,7 @@ import { registrarRotasAuth } from '../../modules/auth/http/routes';
 import { registrarRotasPacientes } from '../../modules/pacientes/http/routes';
 import { registrarRotasProcedimentos } from '../../modules/procedimentos/http/routes';
 import { registrarRotasProfissionais } from '../../modules/profissionais/http/routes';
+import { registrarRotasLembretes } from '../../modules/lembretes/http/routes';
 import { registrarPlugins } from '../auth/jwt';
 import { env } from '../config';
 import { pingBanco } from '../db';
@@ -47,6 +48,7 @@ export async function criarApp(): Promise<FastifyInstance> {
       await registrarRotasProfissionais(api);
       await registrarRotasProcedimentos(api);
       await registrarRotasAgendamentos(api);
+      await registrarRotasLembretes(api);
     },
     { prefix: '/api/v1' }
   );

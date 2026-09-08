@@ -6,6 +6,7 @@ import { aplicarDotEnv } from '../src/platform/config';
 import {
   agendamento,
   clinica,
+  configuracaoClinica,
   paciente,
   procedimento,
   profissional,
@@ -182,6 +183,21 @@ export const runSeed = async (): Promise<void> => {
       fim: new Date(amanha.getTime() + 30 * 60_000),
       status: 'AGENDADO',
       criadoPor: IDS.recepcao,
+    })
+    .onConflictDoNothing();
+
+  await database
+    .insert(configuracaoClinica)
+    .values({
+      id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+      clinicaId: IDS.clinica,
+      chave: 'LEMBRETES_AUTOMATICOS',
+      valor: {
+        toleranciaMinutos: 5,
+        inicioOperacional: '08:00',
+        fimOperacional: '18:00',
+        limiteLote: 100,
+      },
     })
     .onConflictDoNothing();
 

@@ -18,7 +18,7 @@ export const SENHA = 'senha123';
 
 export async function limparBanco(): Promise<void> {
   await db().execute(sql`TRUNCATE TABLE
-    agendamento, registro_auditoria, paciente, procedimento, profissional, usuario, configuracao_clinica, clinica
+    lembrete, agendamento, registro_auditoria, paciente, procedimento, profissional, usuario, configuracao_clinica, clinica
     RESTART IDENTITY CASCADE`);
 }
 
@@ -118,6 +118,98 @@ export async function semearClinica(): Promise<{
     pacienteId,
     procedimentoId,
   };
+}
+
+export async function semearClinicaSecundaria(): Promise<{
+  clinicaId: string;
+  recepcaoId: string;
+  pacienteId: string;
+  profissionalId: string;
+  procedimentoId: string;
+  agendamentoId: string;
+}> {
+  const senhaHash = await hash(SENHA);
+  const clinicaId = criarUuidV7();
+  const recepcaoId = criarUuidV7();
+  const dentistaId = criarUuidV7();
+  const profissionalId = criarUuidV7();
+  const pacienteId = criarUuidV7();
+  const procedimentoId = criarUuidV7();
+  const agendamentoId = criarUuidV7();
+  const inicio = new Date(Date.now() + 48 * 60 * 60 * 1000);
+
+  await db().insert(clinica).values({
+    id: clinicaId,
+    nome: 'Clinica Secundaria',
+    fusoHorario: 'America/Sao_Paulo',
+    ativo: true,
+  });
+  await db()
+    .insert(usuario)
+    .values([
+      {
+        id: recepcaoId,
+        clinicaId,
+        nome: 'Recepcao Secundaria',
+        email: 'recepcao2@teste.local',
+        senhaHash,
+        papel: 'RECEPCAO',
+        ativo: true,
+      },
+      {
+        id: dentistaId,
+        clinicaId,
+        nome: 'Dentista Secundario',
+        email: 'dentista2@teste.local',
+        senhaHash,
+        papel: 'DENTISTA',
+        ativo: true,
+      },
+    ]);
+  await db().insert(profissional).values({
+    id: profissionalId,
+    clinicaId,
+    usuarioId: dentistaId,
+    nome: 'Dr Secundario',
+    cro: '0002',
+    especialidade: 'Geral',
+    ativo: true,
+  });
+  await db()
+    .insert(paciente)
+    .values({
+      id: pacienteId,
+      clinicaId,
+      nome: 'Paciente Secundario',
+      documento: '98765432100',
+      nascimento: new Date('1991-01-01T00:00:00.000Z'),
+      observacoes: '',
+      telefone: '5511888887777',
+      canalPreferido: 'WHATSAPP',
+      consentimentoAtivo: true,
+    });
+  await db().insert(procedimento).values({
+    id: procedimentoId,
+    clinicaId,
+    nome: 'Avaliação',
+    duracaoMinutos: 30,
+    ativo: true,
+  });
+  await db()
+    .insert(agendamento)
+    .values({
+      id: agendamentoId,
+      clinicaId,
+      pacienteId,
+      profissionalId,
+      procedimentoId,
+      inicio,
+      fim: new Date(inicio.getTime() + 30 * 60 * 1000),
+      status: 'AGENDADO',
+      criadoPor: recepcaoId,
+    });
+
+  return { clinicaId, recepcaoId, pacienteId, profissionalId, procedimentoId, agendamentoId };
 }
 
 export async function login(app: FastifyInstance, email: string): Promise<string> {
