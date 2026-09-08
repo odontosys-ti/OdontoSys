@@ -27,6 +27,7 @@ import {
   useAtualizarStatusAgendamento,
   useCancelarAgendamento,
   useCriarAgendamento,
+  useEnviarLembrete,
   useReagendarAgendamento,
 } from './api';
 
@@ -62,6 +63,7 @@ export function PaginaAgendamentos(): ReactElement {
   const criar = useCriarAgendamento();
   const cancelar = useCancelarAgendamento();
   const atualizarStatus = useAtualizarStatusAgendamento();
+  const enviarLembrete = useEnviarLembrete();
   const toast = useToast();
   const podeEditar = papelPermite(sessao.data?.papel, ['RECEPCAO', 'ADMIN']);
 
@@ -122,6 +124,29 @@ export function PaginaAgendamentos(): ReactElement {
     );
   };
 
+  const podeEnviarLembrete = (item: AgendamentoResponse): boolean => {
+    const paciente = pacientes.data?.dados.find((registro) => registro.id === item.pacienteId);
+    return (
+      podeEditar &&
+      item.status !== 'CANCELADO' &&
+      paciente?.consentimentoAtivo === true &&
+      paciente.telefone !== null &&
+      paciente.canalPreferido !== null
+    );
+  };
+
+  const solicitarLembrete = (item: AgendamentoResponse) => {
+    enviarLembrete.mutate(item.id, {
+      onSuccess: (lembrete) => {
+        toast.mostrar(
+          lembrete.status === 'FALHOU'
+            ? 'Lembrete pendente de nova tentativa.'
+            : 'Lembrete enviado.'
+        );
+      },
+    });
+  };
+
   if (consulta.isLoading) return <Spinner texto="Carregando agendamentos…" />;
   if (consulta.isError) {
     return (
@@ -160,6 +185,16 @@ export function PaginaAgendamentos(): ReactElement {
         {item.status === 'CONFIRMADO' ? (
           <Button variant="ghost" size="sm" onClick={() => mudarStatus(item, 'ATENDIDO')}>
             Marcar atendido
+          </Button>
+        ) : null}
+        {podeEnviarLembrete(item) ? (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={enviarLembrete.isPending}
+            onClick={() => solicitarLembrete(item)}
+          >
+            {enviarLembrete.isPending ? 'Enviando…' : 'Enviar lembrete'}
           </Button>
         ) : null}
       </div>
@@ -228,6 +263,16 @@ export function PaginaAgendamentos(): ReactElement {
           detalhe={
             atualizarStatus.error instanceof ApiError
               ? atualizarStatus.error.message
+              : 'Tente novamente em instantes.'
+          }
+        />
+      ) : null}
+      {enviarLembrete.isError ? (
+        <ErrorState
+          mensagem="Não foi possível enviar o lembrete."
+          detalhe={
+            enviarLembrete.error instanceof ApiError
+              ? enviarLembrete.error.message
               : 'Tente novamente em instantes.'
           }
         />

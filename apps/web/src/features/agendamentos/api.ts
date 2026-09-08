@@ -4,6 +4,7 @@ import {
   SchemaAgendamentosDiaQuery,
   SchemaAtualizarAgendamento,
   SchemaCriarAgendamento,
+  SchemaLembreteResponse,
   SchemaListaAgendamentos,
   type AtualizarAgendamentoRequest,
   type CriarAgendamentoRequest,
@@ -87,6 +88,19 @@ export function useAtualizarStatusAgendamento() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['agendamentos'] });
       void queryClient.invalidateQueries({ queryKey: ['agendamentos-dia'] });
+    },
+  });
+}
+
+export function useEnviarLembrete() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (agendamentoId: string) =>
+      api(`/agendamentos/${agendamentoId}/lembrete`, SchemaLembreteResponse, {
+        method: 'POST',
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['lembretes-pendencias'] });
     },
   });
 }

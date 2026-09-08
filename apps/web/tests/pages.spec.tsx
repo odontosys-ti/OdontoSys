@@ -41,6 +41,12 @@ const paciente = {
   consentimentoRevogadoEm: null,
   ...dataBase,
 };
+const pacienteComContato = {
+  ...paciente,
+  telefone: '5511999998888',
+  canalPreferido: 'WHATSAPP',
+  consentimentoAtivo: true,
+};
 const procedimento = {
   id: id.procedimento,
   nome: 'Profilaxia',
@@ -202,6 +208,65 @@ describe('páginas da base', () => {
       expect.stringContaining(`/agendamentos/${id.agendamento}/status`),
       expect.objectContaining({ method: 'PATCH' })
     );
+  });
+
+  it('envia lembrete para paciente elegível e informa o resultado', async () => {
+    const requisicao = vi.fn((entrada: string | URL | Request, init?: RequestInit) => {
+      const url = String(entrada);
+      if (init?.method === 'POST' && url.includes('/lembrete')) {
+        return resposta({
+          id: '01900000-0000-7000-8000-000000000005',
+          agendamentoId: id.agendamento,
+          pacienteId: id.paciente,
+          canal: 'WHATSAPP',
+          janela: 'MANUAL',
+          status: 'ENVIADO',
+          transporte: 'simulacao',
+          providerId: 'simulacao-1',
+          codigoFalha: null,
+          mensagemFalha: null,
+          criadoEm: dataBase.criadoEm,
+          atualizadoEm: dataBase.atualizadoEm,
+        });
+      }
+      if (url.includes('/pacientes?')) return resposta({ dados: [pacienteComContato], paginacao });
+      return fetchRecursos(entrada, init);
+    });
+    vi.stubGlobal('fetch', requisicao);
+    renderizar(<PaginaAgendamentos />, 'RECEPCAO');
+
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Enviar lembrete' }))[0]);
+
+    expect(await screen.findByText('Lembrete enviado.')).toBeInTheDocument();
+    expect(requisicao).toHaveBeenCalledWith(
+      expect.stringContaining(`/agendamentos/${id.agendamento}/lembrete`),
+      expect.objectContaining({ method: 'POST' })
+    );
+  });
+
+  it('informa falha no envio manual de lembrete', async () => {
+    const requisicao = vi.fn((entrada: string | URL | Request, init?: RequestInit) => {
+      const url = String(entrada);
+      if (init?.method === 'POST' && url.includes('/lembrete')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              erro: { codigo: 'REGRA_NEGOCIO', mensagem: 'Falha no envio.', detalhes: [] },
+              requestId: '01900000-0000-7000-8000-000000000099',
+            }),
+            { status: 422 }
+          )
+        );
+      }
+      if (url.includes('/pacientes?')) return resposta({ dados: [pacienteComContato], paginacao });
+      return fetchRecursos(entrada, init);
+    });
+    vi.stubGlobal('fetch', requisicao);
+    renderizar(<PaginaAgendamentos />, 'ADMIN');
+
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Enviar lembrete' }))[0]);
+
+    expect(await screen.findByText('Não foi possível enviar o lembrete.')).toBeInTheDocument();
   });
 
   it('exibe somente a ação compatível com agendamento confirmado', async () => {

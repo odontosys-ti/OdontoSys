@@ -56,6 +56,11 @@ const SchemaEnv = z.object({
     .transform((valor) => valor === 'true')
     .default(false),
   LOG_LEVEL: z.string().min(1).default('info'),
+  LEMBRETE_TRANSPORTE: z.enum(['simulacao', 'whatsapp', 'sms']).optional(),
+  WHATSAPP_API_URL: z.url().optional(),
+  WHATSAPP_API_TOKEN: z.string().min(1).optional(),
+  SMS_API_URL: z.url().optional(),
+  SMS_API_TOKEN: z.string().min(1).optional(),
 });
 
 export type Env = z.infer<typeof SchemaEnv>;

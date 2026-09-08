@@ -79,6 +79,16 @@ export type MeResponse = UsuarioPublico;
 export const CanalMensagemEnum = z.enum(['WHATSAPP', 'SMS']);
 export type CanalMensagem = z.infer<typeof CanalMensagemEnum>;
 
+export const JanelaLembreteEnum = z.enum([
+  'MANUAL',
+  'VINTE_E_QUATRO_HORAS',
+  'QUARENTA_E_OITO_HORAS',
+]);
+export type JanelaLembrete = z.infer<typeof JanelaLembreteEnum>;
+
+export const StatusLembreteEnum = z.enum(['ENVIADO', 'ENTREGUE', 'FALHOU']);
+export type StatusLembrete = z.infer<typeof StatusLembreteEnum>;
+
 export function normalizarTelefone(valor: string): string {
   return valor.replace(/\D/g, '');
 }
@@ -253,6 +263,27 @@ export const SchemaAgendamentoResponse = z.object({
 });
 export type AgendamentoResponse = z.infer<typeof SchemaAgendamentoResponse>;
 export const SchemaListaAgendamentos = schemaLista(SchemaAgendamentoResponse);
+
+export const SchemaSolicitarLembreteManual = z.object({});
+export type SolicitarLembreteManualRequest = z.infer<typeof SchemaSolicitarLembreteManual>;
+
+export const SchemaLembreteResponse = z.object({
+  id: z.string().uuid(),
+  agendamentoId: z.string().uuid(),
+  pacienteId: z.string().uuid(),
+  canal: CanalMensagemEnum,
+  janela: JanelaLembreteEnum,
+  status: StatusLembreteEnum,
+  transporte: z.string(),
+  providerId: z.string().nullable(),
+  codigoFalha: z.string().nullable(),
+  mensagemFalha: z.string().nullable(),
+  criadoEm: z.string(),
+  atualizadoEm: z.string(),
+});
+export type LembreteResponse = z.infer<typeof SchemaLembreteResponse>;
+export const SchemaListaLembretes = schemaLista(SchemaLembreteResponse);
+export const SchemaListarPendenciasQuery = SchemaPaginacaoQuery;
 
 export function paraJsonSchema(schema: z.ZodType): Record<string, unknown> {
   const convertido = z.toJSONSchema(schema, { target: 'draft-7' });

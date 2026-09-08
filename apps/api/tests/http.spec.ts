@@ -4,7 +4,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { criarApp } from '../src/platform/http/app';
 import { db } from '../src/platform/db';
 import { eq } from 'drizzle-orm';
-import { registroAuditoria } from '../src/platform/db/schema';
+import { lembrete, registroAuditoria } from '../src/platform/db/schema';
+import { SchemaLembreteResponse, SchemaListaLembretes } from '@odontosys/contracts';
 import { limparBanco, login, semearClinica } from './helpers';
 
 describe('API HTTP', () => {
@@ -769,7 +770,156 @@ describe('API HTTP', () => {
     });
     expect(resposta.statusCode).toBe(422);
   });
+
+  it('envia lembrete manual, retorna contrato e é idempotente para sucesso', async () => {
+    const recepcao = await login(app, 'recepcao@teste.local');
+    const ids = await obterIds();
+    await habilitarContato(app, ids.pacienteId, recepcao);
+    const criado = await criarAgendamento(app, recepcao, ids.pacienteId, ids.profissionalId);
+    const agendamentoId = criado.json().id as string;
+
+    const primeiro = await app.inject({
+      method: 'POST',
+      url: `/api/v1/agendamentos/${agendamentoId}/lembrete`,
+      cookies: { sessionId: recepcao },
+    });
+    expect(primeiro.statusCode).toBe(200);
+    expect(SchemaLembreteResponse.parse(primeiro.json())).toMatchObject({
+      agendamentoId,
+      janela: 'MANUAL',
+      status: 'ENVIADO',
+      transporte: 'simulacao',
+    });
+
+    const segundo = await app.inject({
+      method: 'POST',
+      url: `/api/v1/agendamentos/${agendamentoId}/lembrete`,
+      cookies: { sessionId: recepcao },
+    });
+    expect(segundo.statusCode).toBe(200);
+    expect(segundo.json().id).toBe(primeiro.json().id);
+
+    const registros = await db()
+      .select()
+      .from(lembrete)
+      .where(eq(lembrete.agendamentoId, agendamentoId));
+    expect(registros).toHaveLength(1);
+    const auditorias = await db()
+      .select()
+      .from(registroAuditoria)
+      .where(eq(registroAuditoria.entidadeId, primeiro.json().id as string));
+    expect(auditorias).toHaveLength(1);
+    expect(JSON.stringify(auditorias[0])).not.toContain('5511999998888');
+  });
+
+  it('lista somente pendências da clínica e valida o envelope compartilhado', async () => {
+    const recepcao = await login(app, 'recepcao@teste.local');
+    const dentista = await login(app, 'dentista@teste.local');
+    const ids = await obterIds();
+
+    const negadoDentista = await app.inject({
+      method: 'GET',
+      url: '/api/v1/lembretes/pendencias',
+      cookies: { sessionId: dentista },
+    });
+    expect(negadoDentista.statusCode).toBe(403);
+
+    const lista = await app.inject({
+      method: 'GET',
+      url: '/api/v1/lembretes/pendencias?pagina=1&tamanho=10',
+      cookies: { sessionId: recepcao },
+    });
+    expect(lista.statusCode).toBe(200);
+    expect(SchemaListaLembretes.parse(lista.json())).toMatchObject({
+      dados: [],
+      paginacao: { pagina: 1, tamanho: 10, total: 0 },
+    });
+
+    const negadoEnvio = await app.inject({
+      method: 'POST',
+      url: `/api/v1/agendamentos/${ids.pacienteId}/lembrete`,
+      cookies: { sessionId: dentista },
+    });
+    expect(negadoEnvio.statusCode).toBe(403);
+  });
+
+  it('rejeita envio sem consentimento, agendamento cancelado e outra clínica', async () => {
+    const recepcao = await login(app, 'recepcao@teste.local');
+    const ids = await obterIds();
+    const semContato = await criarAgendamento(app, recepcao, ids.pacienteId, ids.profissionalId);
+
+    const semConsentimento = await app.inject({
+      method: 'POST',
+      url: `/api/v1/agendamentos/${semContato.json().id as string}/lembrete`,
+      cookies: { sessionId: recepcao },
+    });
+    expect(semConsentimento.statusCode).toBe(422);
+
+    await habilitarContato(app, ids.pacienteId, recepcao);
+    const cancelado = await criarAgendamento(app, recepcao, ids.pacienteId, ids.profissionalId);
+    const cancelamento = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/agendamentos/${cancelado.json().id as string}`,
+      cookies: { sessionId: recepcao },
+    });
+    expect(cancelamento.statusCode).toBe(200);
+
+    const envioCancelado = await app.inject({
+      method: 'POST',
+      url: `/api/v1/agendamentos/${cancelado.json().id as string}/lembrete`,
+      cookies: { sessionId: recepcao },
+    });
+    expect(envioCancelado.statusCode).toBe(422);
+
+    const outraClinica = await app.inject({
+      method: 'POST',
+      url: '/api/v1/agendamentos/01900000-0000-7000-8000-000000000099/lembrete',
+      cookies: { sessionId: recepcao },
+    });
+    expect(outraClinica.statusCode).toBe(404);
+  });
 });
+
+async function habilitarContato(
+  app: FastifyInstance,
+  pacienteId: string,
+  token: string
+): Promise<void> {
+  const resposta = await app.inject({
+    method: 'PATCH',
+    url: `/api/v1/pacientes/${pacienteId}`,
+    cookies: { sessionId: token },
+    payload: {
+      telefone: '5511999998888',
+      canalPreferido: 'WHATSAPP',
+      consentimentoAtivo: true,
+    },
+  });
+  if (resposta.statusCode !== 200) throw new Error(`contato falhou: ${resposta.body}`);
+}
+
+async function criarAgendamento(
+  app: FastifyInstance,
+  token: string,
+  pacienteId: string,
+  profissionalId: string
+): Promise<Awaited<ReturnType<FastifyInstance['inject']>>> {
+  const deslocamento = contadorAgendamento++ * 60 * 60 * 1000;
+  const procedimento = await obterIds();
+  return app.inject({
+    method: 'POST',
+    url: '/api/v1/agendamentos',
+    cookies: { sessionId: token },
+    payload: {
+      pacienteId,
+      profissionalId,
+      procedimentoId: procedimento.procedimentoId,
+      inicio: new Date(Date.now() + 24 * 60 * 60 * 1000 + deslocamento).toISOString(),
+    },
+  });
+}
+
+let contadorAgendamento = 0;
 
 async function obterIds(): Promise<{
   dentistaId: string;

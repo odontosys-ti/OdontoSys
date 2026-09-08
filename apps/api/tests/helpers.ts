@@ -18,7 +18,7 @@ export const SENHA = 'senha123';
 
 export async function limparBanco(): Promise<void> {
   await db().execute(sql`TRUNCATE TABLE
-    agendamento, registro_auditoria, paciente, procedimento, profissional, usuario, configuracao_clinica, clinica
+    lembrete, agendamento, registro_auditoria, paciente, procedimento, profissional, usuario, configuracao_clinica, clinica
     RESTART IDENTITY CASCADE`);
 }
 

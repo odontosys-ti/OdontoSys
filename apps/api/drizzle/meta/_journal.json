@@ -43,6 +43,13 @@
       "when": 1788888374401,
       "tag": "0005_material_menace",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788889986805,
+      "tag": "0006_fluffy_karma",
+      "breakpoints": true
     }
   ]
 }
