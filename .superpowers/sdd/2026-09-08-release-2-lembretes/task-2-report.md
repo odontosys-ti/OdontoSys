@@ -167,3 +167,67 @@ Correções implementadas e verificadas na branch `release-2`. As alterações p
 - O lease de claim é de 30 segundos. Um processo interrompido pode manter a linha invisível da
   lista de pendências até o lease expirar, após o que o próximo pedido recupera a tentativa.
 - O worker automático de lembretes de 24/48 horas permanece fora do escopo da Task 2.
+
+## Apêndice — rodada adicional da revisão independente
+
+### Proveniência
+
+- Implementação original da Task 2: `746e22c feat(lembretes): entrega envio manual simulado por canal`.
+- Relatório original: `82b37e2 docs(lembretes): registra relatorio da task 2`.
+- Rodada anterior de implementação: `0656956 fix(lembretes): claim manual dispatch safely`.
+- Relatório da rodada anterior: `ceef34e docs(lembretes): document review fixes`.
+- Correção desta rodada (API, whitelist e integração): `21452eb fix(lembretes): recover expired claims safely`.
+- Teste web desta rodada: `ea8ac96 test(web): prove reminder retry feedback`.
+- Este apêndice é novamente commitado separadamente após `ea8ac96`, mantendo código/testes e
+  relatório distinguíveis no histórico; o hash documental desta rodada é o commit imediatamente
+  seguinte a `ea8ac96`.
+
+### Resolução dos quatro apontamentos
+
+1. **Pendências expiradas:** `listarPendencias` agora inclui `FALHOU` sem processamento ou com
+   `emProcessamento = true` e `claimExpiraEm` nulo/expirado. A listagem não devolve `claimToken`,
+   telefone, mensagem de envio ou qualquer dado pessoal na resposta HTTP; a serialização pública
+   continua limitada ao contrato do lembrete. Um retry posterior passa pelo mesmo claim
+   transacional, recupera a linha e finaliza no registro lógico existente.
+2. **Whitelist segura:** a sanitização usa `Object.prototype.hasOwnProperty.call` sobre um mapa
+   congelado. Valores `toString`, `__proto__`, objetos e mensagens não-string resultam sempre em
+   `FALHA_DESCONHECIDA` e na mensagem literal do mapa; nunca há indexação por propriedade herdada
+   nem conversão de resposta do provedor.
+3. **Retry web:** o teste agora clica em `Tentar envio novamente`, faz a segunda requisição POST,
+   verifica exatamente duas requisições e confirma `Lembrete enviado.` na resposta `ENVIADO`.
+   Foram usados os mocks e helpers já existentes, sem alterar os demais fluxos da página.
+4. **Falha de finalização:** o teste PostgreSQL faz o transporte retornar sucesso, força a primeira
+   finalização a falhar, verifica o claim ativo, confirma que uma tentativa imediata não dispara
+   novamente, expira o lease e executa a recuperação. O transporte idempotente recebe a mesma chave
+   duas vezes, mas registra uma única entrega; o banco termina com um único lembrete `ENVIADO` e
+   `emProcessamento = false`. A garantia é: falha local após sucesso externo mantém o claim até o
+   lease, bloqueia concorrência durante o lease e permite apenas recuperação posterior com a mesma
+   chave lógica para deduplicação do adaptador/provedor.
+
+### TDD e verificação desta rodada
+
+#### RED
+
+- A execução focada inicial após adicionar os regressivos falhou em três casos de API: claims
+  expirados não apareciam na lista, e `toString`/`__proto__` atravessavam a whitelist.
+- O teste web passou imediatamente porque o botão de retry já existia na rodada anterior; ele foi
+  fortalecido para provar a segunda chamada e o retorno a sucesso.
+- O teste de falha de finalização também passou imediatamente: a guarda por claim e a recuperação
+  por lease já ofereciam a semântica segura, que agora está documentada e coberta explicitamente.
+
+#### GREEN
+
+- API focada (`lembretes.domain` + `lembretes.integration`): `16/16`.
+- Web focada (`pages.spec.tsx`): `16/16`.
+- Suíte API completa: `70/70` em `11` arquivos.
+- Suíte web completa: `37/37` em `4` arquivos.
+- `type-check` de API e web: passou.
+- `build` do workspace: passou; permanece apenas o aviso conhecido de bundle web acima de 500 kB.
+- ESLint focado e Prettier focado: passaram.
+- `pnpm lint` global: falha somente nos arquivos pré-existentes `README.md` e
+  `.superpowers/sdd/2026-09-08-release-2-lembretes/progress.md`; ambos permaneceram intocados.
+
+### Escopo
+
+Nenhuma mudança iniciou a Task 3. `README.md` e `package.json` continuam apenas com as alterações
+pré-existentes do usuário.
