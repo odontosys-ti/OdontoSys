@@ -35,13 +35,19 @@ emite somente status e contagens (`selecionados`, `enviados`, `falhas`, `duplica
 
 ## Garantias da rodada final de revisão
 
-- A agenda web consulta `GET /lembretes/pendencias` por hook React Query, com estados de
-  carregamento, vazio, erro/refetch e tabela/cards responsivos. Cada pendência permite retry; o
-  cache da fila é invalidado após envio.
+- A agenda web consulta `GET /lembretes/pendencias` por hook React Query, usando a paginação
+  retornada pelo contrato, estado de página e controles anterior/próxima, com estados de
+  carregamento, vazio, erro/refetch e tabela/cards responsivos. Cada pendência permite retry pelo
+  `lembreteId`; o cache da fila é invalidado após envio.
+- Retry de pendência automática usa `POST /lembretes/:id/retry`, reivindica o registro persistido e
+  conserva `janela`, `canal` e chave lógica originais. O POST manual continua reservado à janela
+  `MANUAL`; uma nova tentativa automática não cria um lembrete manual.
 - A janela automática é lida por `clinica_id` na chave persistida
   `LEMBRETES_AUTOMATICOS` de `configuracao_clinica`. O seed grava o default validado; quando não
-  há registro, o worker usa explicitamente o fallback das variáveis de ambiente. Não há tela de
-  escrita nesta release, portanto não há auditoria de escrita de configuração a registrar.
+  há registro, o worker usa explicitamente o fallback das variáveis de ambiente. Horários persistidos
+  exigem hora 0–23 e minuto 0–59; uma clínica inválida é contabilizada como falha segura e não
+  interrompe as demais. Não há tela de escrita nesta release, portanto não há auditoria de escrita
+  de configuração a registrar.
 - Manual e automático aceitam somente `AGENDADO` e `CONFIRMADO`; `FALTOU`, `ATENDIDO` e
   `CANCELADO` são estados terminais rejeitados mesmo com contato e consentimento.
 - Enquanto o transporte roda, o claim é renovado periodicamente com o mesmo token. O timer é
@@ -91,10 +97,11 @@ tarefa de migração separada, com plano de compatibilidade e rollback.
 - Teste E2E PostgreSQL: paciente criado e consentido por HTTP, agenda criada, envio manual enviado,
   passada automática enviada uma vez e segunda passada idempotente; acesso à agenda de clínica
   secundária retornou `404`.
-- API completa: **81/81** testes em 13 arquivos.
-- Web completa: **37/37** testes em 4 arquivos.
-- Cobertura: API **88,08% statements / 75,94% branches**; web **82,02% statements / 71,51%
-  branches**.
+- Baseline anterior à rodada final: API **87/87** e Web **42/42**.
+- API completa após os regressions desta rodada: **92/92** testes em 13 arquivos.
+- Web completa após os regressions desta rodada: **43/43** testes em 4 arquivos.
+- Cobertura atual: API **88,31% statements / 76,69% branches**; web **82,64% statements /
+  72,14% branches**.
 - `pnpm type-check`: passou em contracts, API e web.
 - `pnpm build`: passou em contracts, API e web; permanece o aviso conhecido de chunk web acima de
   500 kB.
@@ -102,6 +109,6 @@ tarefa de migração separada, com plano de compatibilidade e rollback.
 - `pnpm audit --prod`: nenhuma vulnerabilidade conhecida.
 - Comando do worker contra PostgreSQL de teste: concluiu com saída operacional sem PII.
 
-O `pnpm lint` agregado permanece bloqueado somente por formatação pré-existente em
-`README.md` e `.superpowers/sdd/2026-09-08-release-2-lembretes/progress.md`; nenhum deles foi
-alterado nesta release. Não houve merge, PR ou uso de provedor real.
+O `pnpm lint` agregado permanece bloqueado somente por formatação pré-existente em `README.md`;
+`progress.md` foi atualizado e formatado nesta rodada. O README não foi alterado nesta release.
+Não houve merge, PR ou uso de provedor real.

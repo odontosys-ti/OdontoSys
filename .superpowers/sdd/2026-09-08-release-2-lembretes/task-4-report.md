@@ -60,20 +60,20 @@ as auditorias permanecem quatro e o acesso ao agendamento da segunda clínica re
 
 ## Gates obrigatórios
 
-| Gate                                                                    | Resultado                                                                                               |
-| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `pnpm lint`                                                             | bloqueado somente por `README.md` e `.superpowers/.../progress.md`, ambos pré-existentes e fora do diff |
-| `pnpm type-check`                                                       | passou                                                                                                  |
-| `pnpm test`                                                             | passou: API 81/81, web 37/37                                                                            |
-| `pnpm build`                                                            | passou; aviso conhecido de chunk web                                                                    |
-| `pnpm test:coverage`                                                    | passou com os percentuais acima                                                                         |
-| `pnpm audit --prod`                                                     | passou sem vulnerabilidades conhecidas                                                                  |
-| teste E2E focado                                                        | passou 1/1                                                                                              |
-| comando `pnpm --filter @odontosys/api lembretes` no PostgreSQL de teste | passou com saída somente operacional                                                                    |
+| Gate                                                                    | Resultado                                                       |
+| ----------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `pnpm lint`                                                             | bloqueado somente por `README.md`, pré-existente e fora do diff |
+| `pnpm type-check`                                                       | passou                                                          |
+| `pnpm test`                                                             | passou: API 81/81, web 37/37                                    |
+| `pnpm build`                                                            | passou; aviso conhecido de chunk web                            |
+| `pnpm test:coverage`                                                    | passou com os percentuais acima                                 |
+| `pnpm audit --prod`                                                     | passou sem vulnerabilidades conhecidas                          |
+| teste E2E focado                                                        | passou 1/1                                                      |
+| comando `pnpm --filter @odontosys/api lembretes` no PostgreSQL de teste | passou com saída somente operacional                            |
 
 O lint global foi executado novamente após corrigir o único import não usado introduzido pelo teste;
-a falha restante foi exclusivamente a formatação pré-existente nos dois arquivos documentados. Não
-foram usados segredos, provedores reais, chamadas de rede ou dados pessoais reais.
+a falha restante foi exclusivamente a formatação pré-existente em `README.md`. Não foram usados
+segredos, provedores reais, chamadas de rede ou dados pessoais reais.
 
 ## Proveniência e árvore
 
@@ -93,8 +93,8 @@ passaram em GREEN.
 ### Correções entregues
 
 - `usePendenciasLembretes` consulta o contrato paginado de `/lembretes/pendencias`; a agenda exibe
-  loading, vazio, erro com retry/refetch e fila em tabela/cards responsivos. Retry por item chama o
-  POST manual e invalida a query da fila.
+  loading, vazio, erro com retry/refetch, fila em tabela/cards responsivos e navegação real por
+  página. Retry por item chama o POST persistido `/lembretes/:id/retry` e invalida a query da fila.
 - `ConfiguracaoClinicaRepository` e `ServicoConfiguracaoLembretes` validam a configuração
   persistida por clínica. A chave `LEMBRETES_AUTOMATICOS` recebe seed/default seguro; a configuração
   de ambiente permanece somente fallback quando não existe registro. O worker agrupa candidatos
@@ -111,7 +111,7 @@ passaram em GREEN.
   no banco; subprocesso foi evitado por compartilhar deterministicamente o banco de teste e isso
   está documentado como a estratégia de evidência do comando.
 
-### RED/GREEN desta rodada
+### RED/GREEN da rodada anterior
 
 RED observado antes da implementação:
 
@@ -140,3 +140,41 @@ Web focada (pages.spec.tsx): 42/42
   histórico da branch `release-2`.
 - `README.md` e `package.json` raiz permanecem somente com as alterações pré-existentes e não
   entram em nenhum commit desta rodada.
+
+## Rodada final de re-review — paginação, retry persistido e configuração inválida
+
+Esta correção permaneceu na branch `release-2`, sem PR/merge. O RED foi executado antes da
+implementação: o teste web não encontrou o controle de página nem solicitou `pagina=2`; o retry
+automático ainda não tinha rota própria e a API retornou 404; `08:99`/`08:60` eram aceitos; e uma
+exceção de configuração abortava a passada inteira. Os testes existentes foram preservados
+sem asserções definitivas (`!:`) nos arquivos alterados.
+
+### Correções
+
+- `usePendenciasLembretes(pagina, enabled)` inclui página na query key e na URL. A agenda calcula
+  páginas a partir de `paginacao`, renderiza anterior/próxima e mantém loading, vazio, erro/refetch
+  e retry por item.
+- `POST /lembretes/:id/retry` consulta o lembrete dentro da clínica, usa o registro lógico
+  persistido e chama a reivindicação transacional com a mesma janela/canal. A UI envia `item.id`;
+  o teste HTTP prova uma única linha automática `VINTE_E_QUATRO_HORAS`, sem nova linha `MANUAL`.
+- A configuração valida hora 0–23 e minuto 0–59. Falhas de configuração por clínica são
+  contabilizadas com segurança em `falhas`, sem texto bruto e sem impedir outras clínicas.
+
+### GREEN e gates atuais
+
+```text
+RED: Web 2 falhas novas; API 4 falhas novas.
+GREEN focado: Web pages.spec.tsx 22/22; API automático + HTTP 47/47.
+API completo: 13 arquivos, 92/92.
+Web completo: 4 arquivos, 43/43.
+Coverage: API 88,31% statements / 76,69% branches; Web 82,64% statements / 72,14% branches.
+Type-check e build raiz: passaram.
+ESLint e Prettier focados: passaram.
+Audit, drizzle-kit check e db:migrate no PostgreSQL de teste: passaram.
+Worker CLI com candidato sintético real: CONCLUIDO, selecionados=2, enviados=2, falhas=0;
+  consulta posterior no banco confirmou total=1, enviados=1, janela VINTE_E_QUATRO_HORAS.
+```
+
+O lint agregado permanece limitado por formatação preexistente em `README.md`; o ledger foi
+atualizado e formatado nesta rodada, sem editar o README ou o `package.json` raiz. Esta rodada está verificada tecnicamente; aprovação
+independente ainda não é reivindicada neste relatório.
