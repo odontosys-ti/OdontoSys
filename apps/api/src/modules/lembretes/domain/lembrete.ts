@@ -101,6 +101,11 @@ export interface ILembreteRepository {
     agendamentoId: string
   ): Promise<ContextoEnvioLembrete | null>;
   reivindicar(entrada: EntradaReivindicacaoLembrete): Promise<ReivindicacaoLembrete>;
+  renovarClaim(entrada: {
+    lembreteId: string;
+    claimToken: string;
+    leaseMs: number;
+  }): Promise<boolean>;
   finalizar(entrada: ResultadoPersistenciaLembrete): Promise<Lembrete>;
   listarPendencias(clinicaId: string, pagina: number, tamanho: number): Promise<ListaLembretes>;
 }
@@ -195,9 +200,9 @@ export function validarElegibilidadeLembrete(entrada: {
   telefone: string | null;
   canalPreferido: CanalMensagem | null;
 }): void {
-  if (entrada.statusAgendamento === 'CANCELADO') {
+  if (entrada.statusAgendamento !== 'AGENDADO' && entrada.statusAgendamento !== 'CONFIRMADO') {
     throw new AppError('REGRA_NEGOCIO', [
-      { campo: 'status', mensagem: 'Agendamento cancelado não pode receber lembrete.' },
+      { campo: 'status', mensagem: 'Agendamento em estado terminal não pode receber lembrete.' },
     ]);
   }
   if (!entrada.consentimentoAtivo) {

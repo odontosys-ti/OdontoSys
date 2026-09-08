@@ -2,9 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { and, eq } from 'drizzle-orm';
 
-import { ServicoLembretesAutomaticos } from '../src/modules/lembretes/application/automatico';
-import { LembreteRepository } from '../src/modules/lembretes/infra/lembrete.repository';
-import { SimuladorTransporte } from '../src/modules/lembretes/infra/transportes';
+import { executarPassadaLembretes } from '../scripts/lembretes';
 import { criarApp } from '../src/platform/http/app';
 import { db, fecharDb } from '../src/platform/db';
 import { lembrete, registroAuditoria } from '../src/platform/db/schema';
@@ -89,18 +87,8 @@ describe('Release 2 — fluxo integrado de lembrete', () => {
     });
     expect(acessoCruzado.statusCode).toBe(404);
 
-    const worker = new ServicoLembretesAutomaticos(
-      new LembreteRepository(),
-      new SimuladorTransporte(),
-      {
-        toleranciaMinutos: 5,
-        inicioOperacional: '08:00',
-        fimOperacional: '18:00',
-        limiteLote: 100,
-      }
-    );
-    const primeiraPassada = await worker.executar(agoraWorker);
-    const segundaPassada = await worker.executar(agoraWorker);
+    const primeiraPassada = await executarPassadaLembretes(agoraWorker);
+    const segundaPassada = await executarPassadaLembretes(agoraWorker);
     const lembretes = await db()
       .select()
       .from(lembrete)

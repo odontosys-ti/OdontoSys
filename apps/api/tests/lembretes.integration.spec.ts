@@ -122,6 +122,45 @@ describe('integração PostgreSQL de lembretes manuais', () => {
     expect(chamadas).toBe(1);
   });
 
+  it('renova o lease durante transporte lento e mantém uma única chamada concorrente', async () => {
+    const ids = await semearClinica();
+    const agendamentoId = await criarAgendamento(ids);
+    await db()
+      .update(paciente)
+      .set({ telefone: '5511999998888', canalPreferido: 'WHATSAPP', consentimentoAtivo: true })
+      .where(eq(paciente.id, ids.pacienteId));
+
+    let iniciou!: () => void;
+    const transporteIniciado = new Promise<void>((resolve) => {
+      iniciou = resolve;
+    });
+    let chamadas = 0;
+    const transporte: ITeletransporte = {
+      nome: 'teste-lease',
+      async enviar(entrada: EntradaTransporte) {
+        chamadas += 1;
+        iniciou();
+        await new Promise((resolve) => setTimeout(resolve, 180));
+        return {
+          status: 'ENVIADO' as const,
+          providerId: `provider-${entrada.idempotenciaKey}`,
+          codigoFalha: null,
+          mensagemFalha: null,
+        };
+      },
+    };
+    const servico = new ServicoLembretes(new LembreteRepository(), transporte, { leaseMs: 40 });
+    const primeiro = servico.solicitarManual(ids.clinicaId, ids.recepcaoId, agendamentoId);
+    await transporteIniciado;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    await expect(
+      servico.solicitarManual(ids.clinicaId, ids.recepcaoId, agendamentoId)
+    ).rejects.toMatchObject({ codigo: 'REGRA_NEGOCIO' });
+    await expect(primeiro).resolves.toMatchObject({ status: 'ENVIADO' });
+    expect(chamadas).toBe(1);
+  });
+
   it('recupera uma reivindicação expirada sem deixar o registro preso', async () => {
     const ids = await semearClinica();
     const agendamentoId = await criarAgendamento(ids);

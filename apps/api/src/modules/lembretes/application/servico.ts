@@ -14,6 +14,10 @@ import {
   validarElegibilidadeLembrete,
 } from '../domain/lembrete';
 
+const LEASE_LEMBRETE_MS = 30_000;
+
+export type OpcoesServicoLembretes = { leaseMs?: number };
+
 export function serializarLembrete(item: Lembrete): LembreteResponse {
   const seguro = sanitizarLembrete(item);
   return {
@@ -44,7 +48,8 @@ function resultadoFalhaSegura() {
 export class ServicoLembretes {
   constructor(
     private readonly repo: ILembreteRepository,
-    private readonly transporte: ITeletransporte
+    private readonly transporte: ITeletransporte,
+    private readonly opcoes: OpcoesServicoLembretes = {}
   ) {}
 
   async solicitarManual(clinicaId: string, usuarioId: string, agendamentoId: string) {
@@ -99,6 +104,7 @@ export class ServicoLembretes {
       transporte: this.transporte.nome,
       solicitadoPor: usuarioId,
       idempotenciaKey,
+      leaseMs: this.opcoes.leaseMs,
     });
     if (reivindicacao.tipo === 'IDEMPOTENTE') {
       return { tipo: 'IDEMPOTENTE' as const, lembrete: reivindicacao.lembrete };
@@ -112,6 +118,30 @@ export class ServicoLembretes {
       inicio: contexto.inicio,
       fusoHorario: contexto.fusoHorario,
     });
+    const leaseMs = this.opcoes.leaseMs ?? LEASE_LEMBRETE_MS;
+    let heartbeat: Promise<void> | undefined;
+    let leasePerdido = false;
+    const renovar = async () => {
+      try {
+        const renovado = await this.repo.renovarClaim({
+          lembreteId: reivindicacao.lembrete.id,
+          claimToken: reivindicacao.claimToken,
+          leaseMs,
+        });
+        leasePerdido ||= !renovado;
+      } catch {
+        leasePerdido = true;
+      }
+    };
+    const intervaloHeartbeat = Math.max(10, Math.floor(leaseMs / 3));
+    const timer = setInterval(() => {
+      if (!heartbeat) {
+        heartbeat = renovar().finally(() => {
+          heartbeat = undefined;
+        });
+      }
+    }, intervaloHeartbeat);
+
     let resultado;
     try {
       resultado = await this.transporte.enviar({
@@ -122,6 +152,15 @@ export class ServicoLembretes {
       });
     } catch {
       resultado = resultadoFalhaSegura();
+    } finally {
+      clearInterval(timer);
+      if (heartbeat) await heartbeat;
+    }
+
+    if (leasePerdido) {
+      throw new AppError('REGRA_NEGOCIO', [
+        { campo: 'lembrete', mensagem: 'Não foi possível confirmar o claim do lembrete.' },
+      ]);
     }
 
     const persistido = await this.repo.finalizar({

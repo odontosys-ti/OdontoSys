@@ -5,6 +5,7 @@ import {
   SchemaAtualizarAgendamento,
   SchemaCriarAgendamento,
   SchemaLembreteResponse,
+  SchemaListaLembretes,
   SchemaListaAgendamentos,
   type AtualizarAgendamentoRequest,
   type CriarAgendamentoRequest,
@@ -102,5 +103,14 @@ export function useEnviarLembrete() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['lembretes-pendencias'] });
     },
+  });
+}
+
+export function usePendenciasLembretes(enabled = true) {
+  const params = new URLSearchParams({ pagina: '1', tamanho: '50' });
+  return useQuery({
+    queryKey: ['lembretes-pendencias'],
+    enabled,
+    queryFn: () => api(`/lembretes/pendencias?${params.toString()}`, SchemaListaLembretes),
   });
 }

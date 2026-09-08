@@ -28,6 +28,7 @@ import {
   useCancelarAgendamento,
   useCriarAgendamento,
   useEnviarLembrete,
+  usePendenciasLembretes,
   useReagendarAgendamento,
 } from './api';
 
@@ -66,6 +67,7 @@ export function PaginaAgendamentos(): ReactElement {
   const enviarLembrete = useEnviarLembrete();
   const toast = useToast();
   const podeEditar = papelPermite(sessao.data?.papel, ['RECEPCAO', 'ADMIN']);
+  const pendencias = usePendenciasLembretes(podeEditar);
 
   const [modalNovo, setModalNovo] = useState(false);
   const [pacienteId, setPacienteId] = useState('');
@@ -129,15 +131,15 @@ export function PaginaAgendamentos(): ReactElement {
     const paciente = pacientes.data?.dados.find((registro) => registro.id === item.pacienteId);
     return (
       podeEditar &&
-      item.status !== 'CANCELADO' &&
+      (item.status === 'AGENDADO' || item.status === 'CONFIRMADO') &&
       paciente?.consentimentoAtivo === true &&
       paciente.telefone !== null &&
       paciente.canalPreferido !== null
     );
   };
 
-  const solicitarLembrete = (item: AgendamentoResponse) => {
-    enviarLembrete.mutate(item.id, {
+  const solicitarLembrete = (agendamentoId: string) => {
+    enviarLembrete.mutate(agendamentoId, {
       onSuccess: (lembrete) => {
         setLembretePendenteId(lembrete.status === 'FALHOU' ? lembrete.agendamentoId : null);
         toast.mostrar(
@@ -147,6 +149,94 @@ export function PaginaAgendamentos(): ReactElement {
         );
       },
     });
+  };
+
+  const renderPendencias = () => {
+    if (!podeEditar) return null;
+    if (pendencias.isLoading) {
+      return (
+        <Card className="p-4 sm:p-5">
+          <Spinner texto="Carregando pendências de lembretes…" />
+        </Card>
+      );
+    }
+    if (pendencias.isError) {
+      return (
+        <Card className="p-4 sm:p-5">
+          <ErrorState
+            mensagem="Não foi possível carregar as pendências de lembretes."
+            onRetry={() => void pendencias.refetch()}
+          />
+        </Card>
+      );
+    }
+    const itens = pendencias.data?.dados ?? [];
+    if (itens.length === 0) {
+      return (
+        <Card className="p-4 sm:p-5">
+          <h2 className="mb-3 text-lg font-semibold text-ink-900">Pendências de lembretes</h2>
+          <EmptyState
+            mensagem="Nenhuma pendência de lembrete"
+            subtitulo="Envios com falha ficam disponíveis aqui para uma nova tentativa."
+          />
+        </Card>
+      );
+    }
+    return (
+      <section className="space-y-3" aria-labelledby="pendencias-lembretes-titulo">
+        <div>
+          <h2 id="pendencias-lembretes-titulo" className="text-lg font-semibold text-ink-900">
+            Pendências de lembretes
+          </h2>
+          <p className="text-sm text-ink-600">
+            Nenhum dado pessoal é exibido nesta fila operacional.
+          </p>
+        </div>
+        <Table
+          cabecalhos={['Agendamento', 'Janela', 'Canal', 'Falha', 'Ação']}
+          mobile={itens.map((item) => (
+            <MobileCard
+              key={item.id}
+              titulo={`Agendamento ${item.agendamentoId.slice(0, 8)}`}
+              meta={`${item.janela} · ${item.canal}`}
+            >
+              <p className="text-xs text-ink-600">{item.mensagemFalha ?? 'Falha de envio.'}</p>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={enviarLembrete.isPending}
+                onClick={() => solicitarLembrete(item.agendamentoId)}
+              >
+                Tentar envio novamente para esta pendência
+              </Button>
+            </MobileCard>
+          ))}
+        >
+          {itens.map((item) => (
+            <tr key={item.id}>
+              <td className="px-4 py-3.5 font-mono text-xs text-ink-700">
+                {item.agendamentoId.slice(0, 8)}
+              </td>
+              <td className="px-4 py-3.5 text-xs text-ink-700">{item.janela}</td>
+              <td className="px-4 py-3.5 text-xs text-ink-700">{item.canal}</td>
+              <td className="px-4 py-3.5 text-xs text-ink-700">
+                {item.mensagemFalha ?? 'Falha de envio.'}
+              </td>
+              <td className="px-4 py-3.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={enviarLembrete.isPending}
+                  onClick={() => solicitarLembrete(item.agendamentoId)}
+                >
+                  Tentar envio novamente
+                </Button>
+              </td>
+            </tr>
+          ))}
+        </Table>
+      </section>
+    );
   };
 
   if (consulta.isLoading) return <Spinner texto="Carregando agendamentos…" />;
@@ -195,7 +285,7 @@ export function PaginaAgendamentos(): ReactElement {
               variant="outline"
               size="sm"
               disabled={enviarLembrete.isPending}
-              onClick={() => solicitarLembrete(item)}
+              onClick={() => solicitarLembrete(item.id)}
             >
               {enviarLembrete.isPending ? 'Enviando…' : 'Enviar lembrete'}
             </Button>
@@ -204,7 +294,7 @@ export function PaginaAgendamentos(): ReactElement {
                 variant="ghost"
                 size="sm"
                 disabled={enviarLembrete.isPending}
-                onClick={() => solicitarLembrete(item)}
+                onClick={() => solicitarLembrete(item.id)}
               >
                 Tentar envio novamente
               </Button>
@@ -291,6 +381,8 @@ export function PaginaAgendamentos(): ReactElement {
           }
         />
       ) : null}
+
+      {renderPendencias()}
 
       {agendamentos.length === 0 ? (
         <EmptyState

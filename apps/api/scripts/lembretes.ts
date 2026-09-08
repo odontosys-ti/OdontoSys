@@ -1,21 +1,24 @@
 import { fecharDb } from '../src/platform/db';
 import { aplicarDotEnv, env } from '../src/platform/config';
 import { ServicoLembretesAutomaticos } from '../src/modules/lembretes/application/automatico';
+import { ServicoConfiguracaoLembretes } from '../src/modules/lembretes/application/configuracao';
+import { ConfiguracaoClinicaRepository } from '../src/modules/lembretes/infra/configuracao.repository';
 import { LembreteRepository } from '../src/modules/lembretes/infra/lembrete.repository';
 import { criarTransporteLembrete } from '../src/modules/lembretes/infra/transportes';
 
 export async function executarPassadaLembretes(agora = new Date()) {
   aplicarDotEnv();
   const configuracao = env();
+  const fallback = {
+    toleranciaMinutos: configuracao.LEMBRETE_AUTOMATICO_TOLERANCIA_MINUTOS,
+    inicioOperacional: configuracao.LEMBRETE_AUTOMATICO_INICIO,
+    fimOperacional: configuracao.LEMBRETE_AUTOMATICO_FIM,
+    limiteLote: configuracao.LEMBRETE_AUTOMATICO_LIMITE,
+  };
   const servico = new ServicoLembretesAutomaticos(
     new LembreteRepository(),
     criarTransporteLembrete(),
-    {
-      toleranciaMinutos: configuracao.LEMBRETE_AUTOMATICO_TOLERANCIA_MINUTOS,
-      inicioOperacional: configuracao.LEMBRETE_AUTOMATICO_INICIO,
-      fimOperacional: configuracao.LEMBRETE_AUTOMATICO_FIM,
-      limiteLote: configuracao.LEMBRETE_AUTOMATICO_LIMITE,
-    }
+    new ServicoConfiguracaoLembretes(new ConfiguracaoClinicaRepository(), fallback)
   );
   return servico.executar(agora);
 }

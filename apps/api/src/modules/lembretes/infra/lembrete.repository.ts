@@ -17,7 +17,7 @@ import {
   type ReivindicacaoLembrete,
 } from '../domain/lembrete';
 
-const LEASE_LEMBRETE_MS = 30_000;
+export const LEASE_LEMBRETE_MS = 30_000;
 
 function mapear(linha: typeof lembrete.$inferSelect): Lembrete {
   return {
@@ -202,6 +202,29 @@ export class LembreteRepository implements ILembreteRepository, ILembreteAutomat
         idempotenciaKey: entrada.idempotenciaKey,
       };
     });
+  }
+
+  async renovarClaim(entrada: {
+    lembreteId: string;
+    claimToken: string;
+    leaseMs: number;
+  }): Promise<boolean> {
+    const agora = new Date();
+    const atualizado = await db()
+      .update(lembrete)
+      .set({
+        claimExpiraEm: new Date(agora.getTime() + entrada.leaseMs),
+        atualizadoEm: agora,
+      })
+      .where(
+        and(
+          eq(lembrete.id, entrada.lembreteId),
+          eq(lembrete.claimToken, entrada.claimToken),
+          eq(lembrete.emProcessamento, true)
+        )
+      )
+      .returning({ id: lembrete.id });
+    return atualizado.length === 1;
   }
 
   async finalizar(entrada: ResultadoPersistenciaLembrete): Promise<Lembrete> {

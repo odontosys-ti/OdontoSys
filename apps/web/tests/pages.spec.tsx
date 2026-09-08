@@ -72,6 +72,20 @@ const agendamento = {
   criadoEm: dataBase.criadoEm,
   atualizadoEm: dataBase.atualizadoEm,
 };
+const pendencia = {
+  id: '01900000-0000-7000-8000-000000000005',
+  agendamentoId: id.agendamento,
+  pacienteId: id.paciente,
+  canal: 'WHATSAPP',
+  janela: 'MANUAL',
+  status: 'FALHOU',
+  transporte: 'simulacao',
+  providerId: null,
+  codigoFalha: 'SIMULADOR_FALHA',
+  mensagemFalha: 'Não foi possível concluir o envio do lembrete.',
+  criadoEm: dataBase.criadoEm,
+  atualizadoEm: dataBase.atualizadoEm,
+};
 
 function sessao(papel: MeResponse['papel']): MeResponse {
   return {
@@ -111,20 +125,27 @@ function fetchRecursos(entrada: string | URL | Request, init?: RequestInit): Pro
   if (url.includes('/agendamentos?') || url.includes('/agendamentos/dia?')) {
     return resposta({ dados: [agendamento], paginacao });
   }
+  if (url.includes('/lembretes/pendencias')) {
+    return resposta({ dados: [], paginacao: { ...paginacao, total: 0 } });
+  }
   if (url.includes('/pacientes?')) return resposta({ dados: [paciente], paginacao });
   if (url.includes('/profissionais?')) return resposta({ dados: [profissional], paginacao });
   return resposta({ dados: [procedimento], paginacao });
 }
 
 function fetchRecursosComStatus(
-  status: StatusAgendamento
+  status: StatusAgendamento,
+  pacienteRecurso = paciente
 ): (entrada: string | URL | Request, init?: RequestInit) => Promise<Response> {
   return (entrada, init) => {
     const recurso = { ...agendamento, status };
     const url = String(entrada);
     if (['POST', 'PATCH', 'DELETE'].includes(init?.method ?? '')) return resposta(recurso);
     if (url.includes('/agendamentos/dia?')) return resposta({ dados: [recurso], paginacao });
-    if (url.includes('/pacientes?')) return resposta({ dados: [paciente], paginacao });
+    if (url.includes('/lembretes/pendencias')) {
+      return resposta({ dados: [], paginacao: { ...paginacao, total: 0 } });
+    }
+    if (url.includes('/pacientes?')) return resposta({ dados: [pacienteRecurso], paginacao });
     if (url.includes('/profissionais?')) return resposta({ dados: [profissional], paginacao });
     return resposta({ dados: [procedimento], paginacao });
   };
@@ -244,6 +265,86 @@ describe('páginas da base', () => {
     );
   });
 
+  it('mostra carregamento e vazio da agenda persistente de pendências', async () => {
+    let liberar!: () => void;
+    const pendenciasCarregando = new Promise<Response>((resolve) => {
+      liberar = () =>
+        resolve(new Response(JSON.stringify({ dados: [], paginacao }), { status: 200 }));
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((entrada: string | URL | Request, init?: RequestInit) =>
+        String(entrada).includes('/lembretes/pendencias')
+          ? pendenciasCarregando
+          : fetchRecursos(entrada, init)
+      )
+    );
+    renderizar(<PaginaAgendamentos />, 'RECEPCAO');
+    expect(await screen.findByText('Carregando pendências de lembretes…')).toBeInTheDocument();
+    liberar();
+    expect(await screen.findByText('Nenhuma pendência de lembrete')).toBeInTheDocument();
+  });
+
+  it('permite refazer a consulta de pendências quando a lista falha', async () => {
+    let tentativas = 0;
+    const requisicao = vi.fn((entrada: string | URL | Request, init?: RequestInit) => {
+      if (String(entrada).includes('/lembretes/pendencias')) {
+        tentativas += 1;
+        if (tentativas === 1) return Promise.resolve(new Response('{}', { status: 503 }));
+      }
+      return fetchRecursos(entrada, init);
+    });
+    vi.stubGlobal('fetch', requisicao);
+    renderizar(<PaginaAgendamentos />, 'RECEPCAO');
+    expect(
+      await screen.findByText('Não foi possível carregar as pendências de lembretes.')
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Tentar novamente' }));
+    expect(await screen.findByText('Nenhuma pendência de lembrete')).toBeInTheDocument();
+    expect(tentativas).toBe(2);
+  });
+
+  it('lista uma falha sem PII e permite retry por item', async () => {
+    let pendencias = true;
+    let envios = 0;
+    const requisicao = vi.fn((entrada: string | URL | Request, init?: RequestInit) => {
+      const url = String(entrada);
+      if (url.includes('/lembretes/pendencias')) {
+        return resposta({
+          dados: pendencias ? [pendencia] : [],
+          paginacao: { ...paginacao, total: pendencias ? 1 : 0 },
+        });
+      }
+      if (init?.method === 'POST' && url.includes('/lembrete')) {
+        envios += 1;
+        pendencias = false;
+        return resposta({
+          ...pendencia,
+          status: 'ENVIADO',
+          codigoFalha: null,
+          mensagemFalha: null,
+        });
+      }
+      return fetchRecursos(entrada, init);
+    });
+    vi.stubGlobal('fetch', requisicao);
+    renderizar(<PaginaAgendamentos />, 'RECEPCAO');
+    expect(
+      (await screen.findAllByText('Não foi possível concluir o envio do lembrete.')).length
+    ).toBeGreaterThan(0);
+    expect(
+      within(screen.getByRole('region', { name: 'Pendências de lembretes' })).queryByText(
+        'Ana Lima'
+      )
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Tentar envio novamente para esta pendência' })
+    );
+    expect(await screen.findByText('Lembrete enviado.')).toBeInTheDocument();
+    await waitFor(() => expect(envios).toBe(1));
+    expect(await screen.findByText('Nenhuma pendência de lembrete')).toBeInTheDocument();
+  });
+
   it('informa falha no envio manual de lembrete', async () => {
     let tentativas = 0;
     const requisicao = vi.fn((entrada: string | URL | Request, init?: RequestInit) => {
@@ -291,6 +392,16 @@ describe('páginas da base', () => {
     expect(screen.queryByRole('button', { name: 'Confirmar' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Marcar falta' })).not.toBeInTheDocument();
   });
+
+  it.each(['FALTOU', 'ATENDIDO'] as const)(
+    'não oferece lembrete para agendamento terminal %s mesmo com contato elegível',
+    async (status) => {
+      vi.stubGlobal('fetch', vi.fn(fetchRecursosComStatus(status, pacienteComContato)));
+      renderizar(<PaginaAgendamentos />, 'RECEPCAO');
+      expect(await screen.findAllByText('Ana Lima')).not.toHaveLength(0);
+      expect(screen.queryByRole('button', { name: 'Enviar lembrete' })).not.toBeInTheDocument();
+    }
+  );
 
   it('solicita justificativa quando a API bloqueia novo agendamento', async () => {
     const requisicao = vi.fn((entrada: string | URL | Request, init?: RequestInit) => {

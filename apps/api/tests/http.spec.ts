@@ -887,6 +887,43 @@ describe('API HTTP', () => {
     });
     expect(envioCancelado.statusCode).toBe(422);
 
+    const faltou = await criarAgendamento(app, recepcao, ids.pacienteId, ids.profissionalId);
+    const marcarFalta = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/agendamentos/${faltou.json().id as string}/status`,
+      cookies: { sessionId: recepcao },
+      payload: { status: 'FALTOU' },
+    });
+    expect(marcarFalta.statusCode).toBe(200);
+    const envioFaltou = await app.inject({
+      method: 'POST',
+      url: `/api/v1/agendamentos/${faltou.json().id as string}/lembrete`,
+      cookies: { sessionId: recepcao },
+    });
+    expect(envioFaltou.statusCode).toBe(422);
+
+    const atendido = await criarAgendamento(app, recepcao, ids.pacienteId, ids.profissionalId);
+    const confirmar = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/agendamentos/${atendido.json().id as string}/status`,
+      cookies: { sessionId: recepcao },
+      payload: { status: 'CONFIRMADO' },
+    });
+    expect(confirmar.statusCode).toBe(200);
+    const marcarAtendido = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/agendamentos/${atendido.json().id as string}/status`,
+      cookies: { sessionId: recepcao },
+      payload: { status: 'ATENDIDO' },
+    });
+    expect(marcarAtendido.statusCode).toBe(200);
+    const envioAtendido = await app.inject({
+      method: 'POST',
+      url: `/api/v1/agendamentos/${atendido.json().id as string}/lembrete`,
+      cookies: { sessionId: recepcao },
+    });
+    expect(envioAtendido.statusCode).toBe(422);
+
     const segunda = await semearClinicaSecundaria();
     const outraClinica = await app.inject({
       method: 'POST',

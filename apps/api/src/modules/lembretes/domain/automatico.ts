@@ -7,8 +7,13 @@ export type ConfiguracaoAutomacaoLembretes = {
   inicioOperacional: string;
   fimOperacional: string;
   limiteLote: number;
+  /** Compatibilidade para seleção unitária; o worker real agrupa por clínica. */
   clinicaId?: string;
 };
+
+export interface IConfiguracaoAutomacaoLembretes {
+  obterParaClinica(clinicaId: string): Promise<ConfiguracaoAutomacaoLembretes>;
+}
 
 export type JanelaAutomatica = 'VINTE_E_QUATRO_HORAS' | 'QUARENTA_E_OITO_HORAS';
 
@@ -49,7 +54,8 @@ function minutosLocais(instante: Date, fusoHorario: string): number {
 
 function elegivel(contexto: ContextoAutomaticoLembrete): boolean {
   return (
-    contexto.statusAgendamento !== ('CANCELADO' satisfies StatusAgendamento) &&
+    (contexto.statusAgendamento === ('AGENDADO' satisfies StatusAgendamento) ||
+      contexto.statusAgendamento === ('CONFIRMADO' satisfies StatusAgendamento)) &&
     contexto.consentimentoAtivo &&
     contexto.telefone !== null &&
     contexto.canalPreferido !== null

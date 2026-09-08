@@ -6,13 +6,15 @@ import {
   type ConfiguracaoAutomacaoLembretes,
 } from '../src/modules/lembretes/domain/automatico';
 import { ServicoLembretesAutomaticos } from '../src/modules/lembretes/application/automatico';
+import { ServicoConfiguracaoLembretes } from '../src/modules/lembretes/application/configuracao';
 import { LembreteRepository } from '../src/modules/lembretes/infra/lembrete.repository';
+import { ConfiguracaoClinicaRepository } from '../src/modules/lembretes/infra/configuracao.repository';
 import { SimuladorTransporte } from '../src/modules/lembretes/infra/transportes';
 import type { ContextoAutomaticoLembrete } from '../src/modules/lembretes/domain/lembrete';
 import { db, fecharDb } from '../src/platform/db';
 import { agendamento, lembrete, paciente } from '../src/platform/db/schema';
 import { criarUuidV7 } from '../src/platform/uuid';
-import { limparBanco, semearClinica } from './helpers';
+import { limparBanco, semearClinica, semearClinicaSecundaria } from './helpers';
 
 const configuracao: ConfiguracaoAutomacaoLembretes = {
   toleranciaMinutos: 5,
@@ -83,6 +85,8 @@ describe('seleção de lembretes automáticos', () => {
 
   it.each([
     ['cancelado', { statusAgendamento: 'CANCELADO' as const }],
+    ['faltou', { statusAgendamento: 'FALTOU' as const }],
+    ['atendido', { statusAgendamento: 'ATENDIDO' as const }],
     ['sem consentimento', { consentimentoAtivo: false }],
     ['sem contato', { telefone: null, canalPreferido: null }],
   ])('não seleciona agendamento %s', (_descricao, ajustes) => {
@@ -262,6 +266,74 @@ describe('execução automática PostgreSQL', () => {
     expect(JSON.stringify(resumo)).not.toContain('Paciente');
     expect(JSON.stringify(resumo)).not.toContain('5511');
   });
+
+  it('lê a janela operacional persistida por clínica', async () => {
+    const primeira = await semearClinica();
+    const segunda = await semearClinicaSecundaria();
+    const agora = new Date('2026-09-10T11:00:00.000Z');
+    const inicio = new Date('2026-09-11T11:00:00.000Z');
+
+    await db()
+      .update(paciente)
+      .set({ telefone: '5511999998888', canalPreferido: 'WHATSAPP', consentimentoAtivo: true })
+      .where(eq(paciente.id, primeira.pacienteId));
+    await db()
+      .insert(agendamento)
+      .values({
+        id: criarUuidV7(),
+        clinicaId: primeira.clinicaId,
+        pacienteId: primeira.pacienteId,
+        profissionalId: primeira.profissionalId,
+        procedimentoId: primeira.procedimentoId,
+        inicio,
+        fim: new Date(inicio.getTime() + 30 * 60 * 1000),
+        status: 'AGENDADO',
+        criadoPor: primeira.recepcaoId,
+      });
+    await db()
+      .update(agendamento)
+      .set({ inicio, fim: new Date(inicio.getTime() + 30 * 60 * 1000) })
+      .where(eq(agendamento.id, segunda.agendamentoId));
+
+    const configuracoes = await import('../src/platform/db/schema');
+    await db()
+      .insert(configuracoes.configuracaoClinica)
+      .values([
+        {
+          id: criarUuidV7(),
+          clinicaId: primeira.clinicaId,
+          chave: 'LEMBRETES_AUTOMATICOS',
+          valor: {
+            toleranciaMinutos: 5,
+            inicioOperacional: '08:00',
+            fimOperacional: '09:00',
+            limiteLote: 20,
+          },
+        },
+        {
+          id: criarUuidV7(),
+          clinicaId: segunda.clinicaId,
+          chave: 'LEMBRETES_AUTOMATICOS',
+          valor: {
+            toleranciaMinutos: 5,
+            inicioOperacional: '12:00',
+            fimOperacional: '13:00',
+            limiteLote: 20,
+          },
+        },
+      ]);
+
+    const servico = new ServicoLembretesAutomaticos(
+      new LembreteRepository(),
+      new SimuladorTransporte(),
+      new ServicoConfiguracaoLembretes(new ConfiguracaoClinicaRepository(), configuracao)
+    );
+
+    const resumo = await servico.executar(agora);
+
+    expect(resumo.selecionados).toBe(1);
+    expect(resumo.enviados).toBe(1);
+  });
 });
 
 class RepositorioAutomaticoEmMemoria {
@@ -296,5 +368,9 @@ class RepositorioAutomaticoEmMemoria {
   async finalizar() {
     this.lembrete = { id: 'lembrete-1', status: 'ENVIADO', emProcessamento: false };
     return this.lembrete;
+  }
+
+  async renovarClaim() {
+    return true;
   }
 }

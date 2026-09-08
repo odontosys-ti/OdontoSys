@@ -10,12 +10,11 @@ import type { FastifyInstance } from 'fastify';
 
 import { contexto, exigirPapel } from '../../../platform/auth/jwt';
 import { schemaRota } from '../../../platform/http/schema';
-import { serializarLembrete, ServicoLembretes } from '../application/servico';
-import { LembreteRepository } from '../infra/lembrete.repository';
-import { criarTransporteLembrete } from '../infra/transportes';
+import { serializarLembrete } from '../application/servico';
+import { criarServicoLembretesHttp } from './composicao';
 
 export async function registrarRotasLembretes(app: FastifyInstance): Promise<void> {
-  const servico = new ServicoLembretes(new LembreteRepository(), criarTransporteLembrete());
+  const servico = criarServicoLembretesHttp();
 
   app.post<{ Params: IdParams }>(
     '/agendamentos/:id/lembrete',

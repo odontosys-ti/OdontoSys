@@ -1,5 +1,6 @@
 import type { ILembreteAutomaticoRepository, ITeletransporte } from '../domain/lembrete';
 import {
+  type IConfiguracaoAutomacaoLembretes,
   selecionarContextosAutomaticos,
   type ConfiguracaoAutomacaoLembretes,
 } from '../domain/automatico';
@@ -14,22 +15,43 @@ export type ResumoAutomacaoLembretes = {
 
 export class ServicoLembretesAutomaticos {
   private readonly servico: ServicoLembretes;
+  private readonly fonteConfiguracao: IConfiguracaoAutomacaoLembretes;
 
   constructor(
     private readonly repo: ILembreteAutomaticoRepository,
     transporte: ITeletransporte,
-    private readonly configuracao: ConfiguracaoAutomacaoLembretes
+    configuracao: ConfiguracaoAutomacaoLembretes | IConfiguracaoAutomacaoLembretes
   ) {
     this.servico = new ServicoLembretes(repo, transporte);
+    this.fonteConfiguracao =
+      typeof (configuracao as IConfiguracaoAutomacaoLembretes).obterParaClinica === 'function'
+        ? (configuracao as IConfiguracaoAutomacaoLembretes)
+        : { obterParaClinica: async () => configuracao as ConfiguracaoAutomacaoLembretes };
   }
 
   async executar(agora: Date): Promise<ResumoAutomacaoLembretes> {
-    const toleranciaMs = this.configuracao.toleranciaMinutos * 60_000;
+    const toleranciaMs = 60 * 60_000;
     const contextos = await this.repo.listarContextosAutomaticos(
       new Date(agora.getTime() + 24 * 60 * 60_000 - toleranciaMs),
       new Date(agora.getTime() + 48 * 60 * 60_000 + toleranciaMs)
     );
-    const selecionados = selecionarContextosAutomaticos(contextos, agora, this.configuracao);
+    const porClinica = new Map<string, typeof contextos>();
+    for (const contexto of contextos) {
+      const agrupamento = porClinica.get(contexto.clinicaId) ?? [];
+      agrupamento.push(contexto);
+      porClinica.set(contexto.clinicaId, agrupamento);
+    }
+    const selecionados = (
+      await Promise.all(
+        [...porClinica.entries()].map(async ([clinicaId, itens]) =>
+          selecionarContextosAutomaticos(
+            itens,
+            agora,
+            await this.fonteConfiguracao.obterParaClinica(clinicaId)
+          )
+        )
+      )
+    ).flat();
     const resumo: ResumoAutomacaoLembretes = {
       selecionados: selecionados.length,
       enviados: 0,

@@ -67,6 +67,17 @@ describe('domínio de lembretes', () => {
     ).toThrow();
   });
 
+  it.each(['FALTOU', 'ATENDIDO'] as const)('rejeita agendamento terminal %s', (status) => {
+    expect(() =>
+      validarElegibilidadeLembrete({
+        statusAgendamento: status,
+        consentimentoAtivo: true,
+        telefone: '5511999998888',
+        canalPreferido: 'SMS',
+      })
+    ).toThrow();
+  });
+
   it('simulador retorna resultado determinístico', async () => {
     const transporte = new SimuladorTransporte();
     const entrada = {
@@ -264,6 +275,10 @@ class RepositorioEmMemoria implements ILembreteRepository {
       atualizadoEm: agora,
     };
     return this.lembrete;
+  }
+
+  async renovarClaim(): Promise<boolean> {
+    return true;
   }
 
   async listarPendencias(): Promise<ListaLembretes> {
